@@ -2141,7 +2141,7 @@ def _safe_extract_tar(raw_bytes, dest="/work"):
       return false;
     }
 
-    const RECIPES = [
+const RECIPES = [
       ["COI Test: Interrupt infinite Python loop (Ctrl+C / Stop)", `echo "Looping in Python — press Ctrl+C or click Stop (no worker kill)..." && python3 -c 'while True: pass'`],
       ["Scrape (Offline): HTML table → CSV → DuckDB", `scrape sample.html --tables --csv > products.csv && duckdb --preview "SELECT Category, Model, Price_USD, Score FROM 'products.csv' ORDER BY Score DESC"`],
       ["Scrape (Offline): XPath query via lxml", `scrape sample.html --xpath '//table[@id="products"]//tbody/tr/td[1]/text()'`],
@@ -2156,6 +2156,15 @@ def _safe_extract_tar(raw_bytes, dest="/work"):
       ["Zip: create + list archive (fflate)", "zip bundle.zip analyze.py sales.csv sample.html README.md && unzip -l bundle.zip"],
       ["Progress bar 75% (OSC 9;4)", `printf '\\033]9;4;1;75\\007Progress set to 75%%\\n'`],
       ["Clear progress bar (OSC 9;4)", `printf '\\033]9;4;0\\007Progress cleared\\n'`],
+      ["DuckDB: Sales pivot Q1 vs Q2 → Preview", `duckdb --preview "SELECT region, SUM(CASE WHEN quarter='Q1' THEN revenue ELSE 0 END) AS Q1, SUM(CASE WHEN quarter='Q2' THEN revenue ELSE 0 END) AS Q2, SUM(revenue) AS total FROM 'sales.csv' GROUP BY region ORDER BY total DESC"`],
+      ["Scrape + DuckDB: Query JSON metadata via SQL", `scrape sample.html --meta > meta.json && duckdb --preview "SELECT title, canonical, og.title AS og_title, og.type AS og_type FROM 'meta.json'"`],
+      ["Scrape (Offline): Parse RSS XML feed → Preview", `printf '<rss version="2.0"><channel><item><title>Bashkit WASM</title><link>https://example.org/bashkit</link><pubDate>2026-11-01</pubDate><description>Sandboxed shell in the browser</description></item><item><title>Pyodide 3.14</title><link>https://example.org/pyodide</link><pubDate>2026-11-15</pubDate><description>CPython WebAssembly runtime</description></item></channel></rss>' | scrape - --rss --preview`],
+      ["Crawl (Live): httpbin.org links → JSONL + Preview", `crawl https://httpbin.org/links/5/0 --max-pages 5 --depth 1 --no-robots -o crawl.jsonl --preview`],
+      ["Python + Workbench: Render HTML report in Preview", `python3 -c 'import workbench; q = f"SELECT region, SUM(revenue) AS total FROM {chr(39)}sales.csv{chr(39)} GROUP BY region ORDER BY total DESC"; res = (await workbench.duckdb(q)).to_py(); rows = "".join(f"<tr><td>{r[0]}</td><td align=right>{r[1]:,}</td></tr>" for r in res["rows"]); await workbench.show_html(f"<body style=font-family:system-ui;padding:16px><h2>Regional Revenue</h2><table border=1 cellspacing=0 cellpadding=8><tr><th>Region</th><th>Total</th></tr>{rows}</table></body>", "Revenue Report")'`],
+      ["SQLite: Create table + query CLI", `sqlite3 notes.db "CREATE TABLE IF NOT EXISTS notes(id INTEGER PRIMARY KEY, tag TEXT, body TEXT); DELETE FROM notes; INSERT INTO notes(tag, body) VALUES ('cli','Bashkit WASM'), ('sql','SQLite3 builtin'); SELECT id, tag, body FROM notes;"`],
+      ["Terminal Image (imgcat): Generate PNG + render inline", `python3 -c 'import struct, zlib; ck = lambda t, d: struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d)); w = h = 64; raw = b"".join(b"\\x00" + b"".join(bytes([x*4, y*4, 210]) for x in range(w)) for y in range(h)); png = b"\\x89PNG\\r\\n\\x1a\\n" + ck(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + ck(b"IDAT", zlib.compress(raw)) + ck(b"IEND", b""); open("gradient.png", "wb").write(png); print("Wrote gradient.png")' && imgcat gradient.png && preview gradient.png`],
+      ["Git: branch + edit + diff (isomorphic-git)", `rm -rf demo_repo && mkdir -p demo_repo && cd demo_repo && git init && echo "v1" > app.txt && git add app.txt && git commit -m "Initial v1" && git branch dev && git checkout dev && printf "v1\\nv2\\n" > app.txt && git diff && cd /work`],
+      ["Gzip: compress + verify + decompress (fflate)", `gzip sample.html && wc -c sample.html sample.html.gz && gunzip sample.html.gz`],
     ];
 
     for (const [label, cmd] of RECIPES) {
