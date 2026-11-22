@@ -1,0 +1,2948 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bashkit + Pyodide 314.0.x Workbench (COI + SAB)</title>
+  <!-- Must load first to inject COOP/COEP headers via Service Worker -->
+  <script src="./coi-serviceworker.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/css/xterm.css" crossorigin="anonymous" />
+  <script type="importmap">
+  {
+    "imports": {
+      "@xterm/xterm": "https://esm.sh/@xterm/xterm@6.0.0",
+      "@xterm/addon-fit": "https://esm.sh/@xterm/addon-fit@0.11.0",
+      "@xterm/addon-search": "https://esm.sh/@xterm/addon-search@0.16.0",
+      "@xterm/addon-web-links": "https://esm.sh/@xterm/addon-web-links@0.12.0",
+      "@xterm/addon-webgl": "https://esm.sh/@xterm/addon-webgl@0.19.0",
+      "@xterm/addon-unicode11": "https://esm.sh/@xterm/addon-unicode11@0.9.0",
+      "@xterm/addon-image": "https://esm.sh/@xterm/addon-image@0.9.0",
+      "@xterm/addon-clipboard": "https://esm.sh/@xterm/addon-clipboard@0.2.0",
+      "@xterm/addon-serialize": "https://esm.sh/@xterm/addon-serialize@0.14.0",
+      "@xterm/addon-progress": "https://esm.sh/@xterm/addon-progress@0.2.0",
+
+      "@duckdb/duckdb-wasm": "https://esm.sh/@duckdb/duckdb-wasm@1.29.0",
+
+      "@lezer/common": "https://esm.sh/@lezer/common@1.2.3",
+      "@lezer/highlight": "https://esm.sh/@lezer/highlight@1.2.1?external=@lezer/common",
+      "@lezer/lr": "https://esm.sh/@lezer/lr@1.4.2?external=@lezer/common",
+      "@codemirror/state": "https://esm.sh/@codemirror/state@6.5.2",
+      "@codemirror/view": "https://esm.sh/@codemirror/view@6.36.5?external=@codemirror/state",
+      "@codemirror/language": "https://esm.sh/@codemirror/language@6.11.0?external=@codemirror/state,@codemirror/view,@lezer/common,@lezer/highlight,@lezer/lr",
+      "@codemirror/autocomplete": "https://esm.sh/@codemirror/autocomplete@6.18.6?external=@codemirror/state,@codemirror/view,@codemirror/language,@lezer/common",
+      "@codemirror/commands": "https://esm.sh/@codemirror/commands@6.8.0?external=@codemirror/state,@codemirror/view,@codemirror/language",
+      "@codemirror/lang-python": "https://esm.sh/@codemirror/lang-python@6.1.7?external=@codemirror/state,@codemirror/view,@codemirror/language,@codemirror/autocomplete,@lezer/common,@lezer/highlight,@lezer/lr",
+      "@codemirror/lang-javascript": "https://esm.sh/@codemirror/lang-javascript@6.2.3?external=@codemirror/state,@codemirror/view,@codemirror/language,@codemirror/autocomplete,@lezer/common,@lezer/highlight,@lezer/lr",
+      "@codemirror/lang-sql": "https://esm.sh/@codemirror/lang-sql@6.8.0?external=@codemirror/state,@codemirror/view,@codemirror/language,@codemirror/autocomplete,@lezer/common,@lezer/highlight,@lezer/lr",
+      "@codemirror/lang-json": "https://esm.sh/@codemirror/lang-json@6.0.1?external=@codemirror/state,@codemirror/view,@codemirror/language,@lezer/common,@lezer/highlight,@lezer/lr",
+      "@codemirror/lang-markdown": "https://esm.sh/@codemirror/lang-markdown@6.3.2?external=@codemirror/state,@codemirror/view,@codemirror/language,@codemirror/autocomplete,@lezer/common,@lezer/highlight,@lezer/lr",
+      "@codemirror/theme-one-dark": "https://esm.sh/@codemirror/theme-one-dark@6.1.2?external=@codemirror/state,@codemirror/view,@codemirror/language,@lezer/highlight"
+    }
+  }
+  </script>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --panel: #161922;
+      --panel-2: #1d2230;
+      --border: #2a3142;
+      --text: #e6eaf2;
+      --muted: #8b95ab;
+      --accent: #6ea8fe;
+      --ok: #3dd68c;
+      --warn: #f5b951;
+      --err: #ff6b7a;
+      --sidebar-w: 245px;
+      --preview-w: 440px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      --sans: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; height: 100%; background: var(--bg); color: var(--text);
+      font-family: var(--sans); overflow: hidden;
+    }
+    body { display: grid; grid-template-rows: 46px 3px 1fr; }
+
+    header {
+      display: flex; align-items: center; gap: 6px; padding: 0 12px;
+      background: var(--panel); border-bottom: 1px solid var(--border);
+      font-size: 12.5px; user-select: none; overflow-x: auto;
+    }
+    .brand { font-weight: 600; white-space: nowrap; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px;
+      border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border);
+      font-size: 11.5px; color: var(--muted); white-space: nowrap;
+    }
+    .badge.ok { color: var(--ok); border-color: rgba(61, 214, 140, 0.35); }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
+    .dot.ready { background: var(--ok); }
+    .dot.error { background: var(--err); }
+    .spacer { flex: 1; }
+
+    #osc-progress-track { background: var(--bg); height: 3px; width: 100%; overflow: hidden; }
+    #osc-progress-bar {
+      height: 100%; width: 0%; background: var(--accent);
+      transition: width 0.15s ease, background-color 0.15s ease;
+    }
+    #osc-progress-bar.error { background: var(--err); }
+    #osc-progress-bar.paused { background: var(--warn); }
+    #osc-progress-bar.indeterminate { width: 35%; animation: slide 1.1s infinite linear; }
+    @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(350%); } }
+
+    button, select, input[type="text"] {
+      background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+      border-radius: 6px; padding: 4px 8px; font-size: 12px; white-space: nowrap;
+    }
+    button, select { cursor: pointer; }
+    button:hover:not(:disabled), select:hover:not(:disabled) { border-color: var(--accent); }
+    button:disabled, select:disabled { opacity: 0.45; cursor: not-allowed; }
+    button.danger:hover:not(:disabled) { border-color: var(--err); color: var(--err); }
+    button.primary { border-color: var(--accent); color: var(--accent); }
+    button.active-pill { border-color: var(--ok); color: var(--ok); }
+
+    main {
+      display: grid;
+      grid-template-columns: var(--sidebar-w) 4px 1fr 0px 0px;
+      min-height: 0;
+    }
+    main.preview-open {
+      grid-template-columns: var(--sidebar-w) 4px 1fr 4px var(--preview-w);
+    }
+    .splitter { background: var(--border); cursor: col-resize; transition: background 0.12s; }
+    .splitter:hover, .splitter.active { background: var(--accent); }
+    main:not(.preview-open) #split-right { pointer-events: none; }
+
+    aside {
+      display: flex; flex-direction: column; min-width: 0; min-height: 0;
+      background: var(--panel);
+    }
+    .pane-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 6px;
+      padding: 6px 10px; font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted);
+      border-bottom: 1px solid var(--border); min-height: 34px;
+    }
+    .pane-head .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pane-actions { display: flex; gap: 4px; }
+    .pane-actions button { padding: 2px 7px; font-size: 11px; text-transform: none; }
+
+    #file-tree {
+      flex: 1; overflow: auto; padding: 6px; font-family: var(--mono); font-size: 12px;
+    }
+    .entry {
+      display: flex; align-items: center; gap: 6px; padding: 4px 6px;
+      border-radius: 5px; cursor: pointer; white-space: nowrap;
+    }
+    .entry:hover { background: var(--panel-2); }
+    .entry .name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+    .entry .meta { color: var(--muted); font-size: 11px; }
+    .entry .act {
+      opacity: 0; background: none; border: none; padding: 0 3px;
+      color: var(--muted); font-size: 12px;
+    }
+    .entry:hover .act { opacity: 1; }
+    .entry .act:hover { color: var(--accent); }
+    .entry .act.del:hover { color: var(--err); }
+    .drop-hint {
+      padding: 7px 10px; font-size: 11px; color: var(--muted);
+      border-top: 1px solid var(--border); text-align: center;
+    }
+    body.dragging main { outline: 2px dashed var(--accent); outline-offset: -4px; }
+
+    #center-col {
+      display: flex; flex-direction: column; min-width: 0; min-height: 0;
+      background: #0b0d12; position: relative;
+    }
+    #tab-bar {
+      display: flex; align-items: center; gap: 4px; padding: 4px 8px;
+      background: var(--panel); border-bottom: 1px solid var(--border);
+      min-height: 34px; overflow-x: auto; user-select: none;
+    }
+    .tab {
+      display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px;
+      border-radius: 6px; font-size: 12px; color: var(--muted);
+      background: transparent; border: 1px solid transparent; cursor: pointer;
+    }
+    .tab:hover { background: var(--panel-2); color: var(--text); }
+    .tab.active { background: #0b0d12; color: var(--text); border-color: var(--border); }
+    .tab .close { font-size: 11px; opacity: 0.6; padding: 0 2px; border-radius: 3px; }
+    .tab .close:hover { opacity: 1; color: var(--err); }
+    #btn-new-tab { padding: 2px 8px; font-size: 13px; line-height: 1.2; }
+
+    #search-bar {
+      position: absolute; top: 42px; right: 16px; z-index: 20;
+      display: flex; align-items: center; gap: 4px; padding: 5px 7px;
+      background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+    }
+    #search-bar[hidden] { display: none; }
+    #search-input { width: 190px; outline: none; }
+    #search-input:focus { border-color: var(--accent); }
+
+    #term-stage { position: relative; flex: 1; min-width: 0; min-height: 0; padding: 6px 8px; }
+    .term-slot { width: 100%; height: 100%; display: none; }
+    .term-slot.active { display: block; }
+
+    #preview-pane {
+      display: flex; flex-direction: column; min-width: 0; min-height: 0;
+      background: var(--panel); overflow: hidden;
+    }
+    #preview-body {
+      flex: 1; overflow: auto; padding: 12px; font-size: 13px;
+      display: flex; flex-direction: column; min-height: 0;
+    }
+    #preview-body.cm-mode { padding: 0; overflow: hidden; }
+    #preview-body .cm-editor { height: 100%; font-size: 12.5px; }
+    #preview-body .cm-scroller { font-family: var(--mono); overflow: auto; }
+    #preview-body pre {
+      margin: 0; font-family: var(--mono); font-size: 12px; white-space: pre-wrap;
+      word-break: break-word; line-height: 1.45;
+    }
+    #preview-body img {
+      max-width: 100%; height: auto; border-radius: 6px; background: #fff; padding: 6px;
+    }
+    #preview-body iframe {
+      flex: 1; width: 100%; min-height: 360px; border: 1px solid var(--border);
+      border-radius: 6px; background: #fff;
+    }
+    table.grid {
+      width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px;
+    }
+    table.grid th, table.grid td {
+      border: 1px solid var(--border); padding: 4px 7px; text-align: left;
+    }
+    table.grid th { background: var(--panel-2); color: var(--accent); }
+    .live-pill {
+      font-size: 10px; padding: 1px 6px; border-radius: 999px;
+      background: rgba(61, 214, 140, 0.14); color: var(--ok);
+      border: 1px solid rgba(61, 214, 140, 0.35); text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="brand">Bashkit + Pyodide 314.0.x</span>
+    <span class="badge"><span id="status-dot" class="dot"></span><span id="status-text">Booting…</span></span>
+    <span class="badge" id="coi-badge" title="Cross-Origin Isolation / SharedArrayBuffer status">COI: …</span>
+    <span class="badge" id="persist-badge">FS: …</span>
+    <span class="badge" id="renderer-badge" title="xterm.js renderer">GL: …</span>
+    <select id="recipe-select" disabled title="Run an example in the active terminal">
+      <option value="">Recipes…</option>
+    </select>
+    <span class="spacer"></span>
+    <input id="upload-input" type="file" multiple hidden />
+    <button id="btn-proxy" disabled title="Configure optional CORS proxy prefix for curl/scrape/crawl">Proxy: off</button>
+    <button id="btn-upload" disabled>Upload</button>
+    <button id="btn-export-zip" disabled title="Export /work as .zip via fflate">Export .zip</button>
+    <button id="btn-share" disabled title="Encode /work into URL hash via fflate">Share URL</button>
+    <button id="btn-mount" disabled title="Mount local folder (Chromium)">Mount</button>
+    <button id="btn-sync" hidden>Sync</button>
+    <button id="btn-search" disabled title="Search terminal (Ctrl+Shift+F)">Search</button>
+    <button id="btn-save-log" disabled title="Download serialized terminal log">Save Log</button>
+    <button id="btn-stop" class="danger" disabled title="Send SIGINT to Python (via SAB) or cancel bash">Stop</button>
+    <button id="btn-kill" class="danger" disabled>Kill</button>
+    <button id="btn-reset" disabled>Reset</button>
+    <button id="btn-preview" disabled>Preview</button>
+  </header>
+
+  <div id="osc-progress-track"><div id="osc-progress-bar"></div></div>
+
+  <main id="layout">
+    <aside>
+      <div class="pane-head">
+        <span class="title">/work</span>
+        <div class="pane-actions">
+          <button id="btn-new-file" title="New file">+</button>
+          <button id="btn-refresh" title="Refresh">↻</button>
+        </div>
+      </div>
+      <div id="file-tree"></div>
+      <div class="drop-hint">Drop files, <code>.html</code>, <code>.parquet</code>, <code>.zip</code></div>
+    </aside>
+
+    <div class="splitter" id="split-left"></div>
+
+    <section id="center-col">
+      <div id="tab-bar">
+        <button id="btn-new-tab" disabled title="New terminal tab sharing /work">+</button>
+      </div>
+      <div id="search-bar" hidden>
+        <input id="search-input" type="text" placeholder="Find in terminal…" />
+        <button id="search-prev" title="Previous">↑</button>
+        <button id="search-next" title="Next">↓</button>
+        <button id="search-close" title="Close">✕</button>
+      </div>
+      <div id="term-stage"></div>
+    </section>
+
+    <div class="splitter" id="split-right"></div>
+
+    <section id="preview-pane">
+      <div class="pane-head">
+        <span id="preview-title" class="title">Preview</span>
+        <span id="live-badge" class="live-pill" hidden>Live</span>
+        <div class="pane-actions">
+          <button id="btn-edit-toggle" hidden>Edit</button>
+          <button id="btn-save-file" class="primary" hidden>Save</button>
+          <button id="btn-close-preview">✕</button>
+        </div>
+      </div>
+      <div id="preview-body"><span style="color:var(--muted)">Click a file to preview/edit (CodeMirror 6), or run <code>scrape</code> / <code>preview</code>.</span></div>
+    </section>
+  </main>
+
+  <!-- Inline Module Web Worker (direct HTTPS URLs since Workers do not inherit page importmap) -->
+  <script id="worker-code" type="text/plain">
+    import { initBashkit, Bash, Terminal } from "https://esm.sh/@everruns/bashkit-wasm";
+    import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v314.0.8/full/pyodide.mjs";
+    import git from "https://esm.sh/isomorphic-git@1.27.2";
+    import gitHttp from "https://esm.sh/isomorphic-git@1.27.2/http/web";
+    import * as fflate from "https://esm.sh/fflate@0.8.2";
+
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+    let pyodide = null;
+    let sharedFs = null;
+    let gitFs = null;
+    let customBuiltins = null;
+    let pyBash = null;
+    let nativeMount = null;
+    let idbfsActive = false;
+    let currentCols = 100;
+    let defaultCorsProxy = "";
+
+    let interruptView = null;
+    let stateView = null;
+
+    const sessions = new Map();
+    let nextHostRpcId = 1;
+    const pendingHostRpcs = new Map();
+
+    function callHost(method, args = {}) {
+      return new Promise((resolve, reject) => {
+        const id = nextHostRpcId++;
+        pendingHostRpcs.set(id, { resolve, reject });
+        self.postMessage({ type: "host-rpc", id, method, args });
+      });
+    }
+
+    const sendStatus = (text, state = "") => self.postMessage({ type: "status", text, state });
+    const sendTermOut = (tabId, data) => self.postMessage({ type: "term-out", tabId, data });
+    const sendTermLog = (tabId, text) => sendTermOut(tabId, String(text).replace(/\r?\n/g, "\r\n"));
+
+    // ---------- IDBFS + Live-Reload Tracking ----------
+    let syncTimer = null;
+    let treeTimer = null;
+    const changedPaths = new Set();
+    let changeTimer = null;
+
+    function syncIdbfs(populate) {
+      if (!idbfsActive) return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        pyodide.FS.syncfs(populate, (err) => (err ? reject(err) : resolve()));
+      });
+    }
+
+    function onFsMutated(path) {
+      if (
+        typeof path === "string" &&
+        path.startsWith("/work/") &&
+        !path.startsWith("/work/.git/") &&
+        !path.startsWith("/work/.http_cache/")
+      ) {
+        changedPaths.add(path);
+        clearTimeout(changeTimer);
+        changeTimer = setTimeout(() => {
+          for (const p of changedPaths) self.postMessage({ type: "file-changed", path: p });
+          changedPaths.clear();
+        }, 120);
+      }
+      clearTimeout(treeTimer);
+      treeTimer = setTimeout(emitTree, 85);
+      if (idbfsActive) {
+        clearTimeout(syncTimer);
+        syncTimer = setTimeout(() => {
+          syncIdbfs(false).catch((e) => console.warn("IDBFS flush failed:", e));
+        }, 300);
+      }
+    }
+
+    function buildTree(dir) {
+      let names = [];
+      try {
+        names = pyodide.FS.readdir(dir).filter(
+          (n) => n !== "." && n !== ".." && n !== ".git" && n !== ".http_cache",
+        );
+      } catch {
+        return [];
+      }
+      return names.map((name) => {
+        const full = `${dir === "/" ? "" : dir}/${name}`;
+        const st = pyodide.FS.lstat(full);
+        const isDir = pyodide.FS.isDir(st.mode);
+        return { name, full, isDir, size: st.size, children: isDir ? buildTree(full) : [] };
+      }).sort((a, b) => Number(b.isDir) - Number(a.isDir) || a.name.localeCompare(b.name));
+    }
+
+    function emitTree() {
+      if (pyodide) self.postMessage({ type: "tree", nodes: buildTree("/work") });
+    }
+
+    function resolvePath(cwd, target) {
+      if (!target) return cwd;
+      const parts = (target.startsWith("/") ? target : `${cwd}/${target}`).split("/");
+      const stack = [];
+      for (const p of parts) {
+        if (!p || p === ".") continue;
+        if (p === "..") stack.pop();
+        else stack.push(p);
+      }
+      return "/" + stack.join("/");
+    }
+
+    function applyProxy(url, proxy) {
+      const p = (proxy || defaultCorsProxy || "").trim();
+      if (!p) return url;
+      if (p.includes("{url}")) return p.replace("{url}", encodeURIComponent(url));
+      if (p.endsWith("=") || p.endsWith("?")) return p + encodeURIComponent(url);
+      return p.endsWith("/") ? p + url : `${p}/${url}`;
+    }
+
+    // ---------- Shared POSIX Error Wrapper + FS Adapters ----------
+    const POSIX_DESC = {
+      ENOENT: "No such file or directory",
+      EEXIST: "File exists",
+      EISDIR: "Is a directory",
+      ENOTDIR: "Not a directory",
+      ENOTEMPTY: "Directory not empty",
+      EACCES: "Permission denied",
+      EINVAL: "Invalid argument",
+    };
+
+    function makeErrnoWrapper(py) {
+      const errnoToCode = Object.fromEntries(
+        Object.entries(py.ERRNO_CODES).map(([name, num]) => [num, name]),
+      );
+      return function wrap(fn, label = "") {
+        try {
+          return fn();
+        } catch (e) {
+          const code = errnoToCode[e?.errno];
+          if (code) {
+            const desc = POSIX_DESC[code] || code;
+            const msg = label ? `${label}: ${desc} (${code})` : `${desc} (${code})`;
+            const err = new Error(msg);
+            err.code = code;
+            throw err;
+          }
+          throw e;
+        }
+      };
+    }
+
+    function createPyodideFsAdapter(py, wrap) {
+      const { FS } = py;
+      const norm = (p) => (p.length > 1 && p.endsWith("/") ? p.slice(0, -1) : p);
+
+      function statEntry(rawPath) {
+        const path = norm(rawPath);
+        if (path === "/dev/null") return { type: "file", size: 0, mode: 0o666, mtimeMs: 0 };
+        const s = FS.lstat(path);
+        const type = FS.isDir(s.mode) ? "dir" : FS.isLink(s.mode) ? "symlink" : "file";
+        return {
+          type,
+          size: s.size,
+          mode: s.mode & 0o777,
+          mtimeMs: s.mtime instanceof Date ? s.mtime.getTime() : Number(s.mtime),
+        };
+      }
+
+      function removeRecursive(path) {
+        const s = FS.lstat(path);
+        if (FS.isDir(s.mode)) {
+          for (const name of FS.readdir(path)) {
+            if (name === "." || name === "..") continue;
+            removeRecursive(`${path === "/" ? "" : path}/${name}`);
+          }
+          FS.rmdir(path);
+        } else {
+          FS.unlink(path);
+        }
+      }
+
+      return {
+        read(p) {
+          const path = norm(p);
+          return path === "/dev/null" ? new Uint8Array(0) : wrap(() => FS.readFile(path), path);
+        },
+        write(p, bytes) {
+          const path = norm(p);
+          if (path === "/dev/null") return;
+          const data = typeof bytes === "string" ? encoder.encode(bytes) : bytes;
+          wrap(() => FS.writeFile(path, data), path);
+        },
+        append(p, bytes) {
+          const path = norm(p);
+          if (path === "/dev/null") return;
+          const add = typeof bytes === "string" ? encoder.encode(bytes) : bytes;
+          wrap(() => {
+            if (!FS.analyzePath(path).exists) { FS.writeFile(path, add); return; }
+            const cur = FS.readFile(path);
+            const merged = new Uint8Array(cur.length + add.length);
+            merged.set(cur, 0); merged.set(add, cur.length);
+            FS.writeFile(path, merged);
+          }, path);
+        },
+        mkdir(p, recursive) {
+          const path = norm(p);
+          wrap(() => (recursive ? FS.mkdirTree(path) : FS.mkdir(path)), path);
+        },
+        remove(p, recursive) {
+          const path = norm(p);
+          wrap(() => {
+            if (recursive) removeRecursive(path);
+            else {
+              const s = FS.lstat(path);
+              FS.isDir(s.mode) ? FS.rmdir(path) : FS.unlink(path);
+            }
+          }, path);
+        },
+        stat(p) { return wrap(() => statEntry(p), p); },
+        readDir(p) {
+          const path = norm(p);
+          return wrap(() =>
+            FS.readdir(path)
+              .filter((name) => name !== "." && name !== "..")
+              .map((name) => ({ name, ...statEntry(`${path === "/" ? "" : path}/${name}`) })),
+            path,
+          );
+        },
+        exists(p) {
+          const path = norm(p);
+          return path === "/dev/null" ? true : FS.analyzePath(path).exists;
+        },
+        rename(a, b) { wrap(() => FS.rename(norm(a), norm(b)), a); },
+        symlink(t, l) { wrap(() => FS.symlink(t, norm(l)), l); },
+        readlink(p) { return wrap(() => FS.readlink(norm(p)), p); },
+        chmod(p, m) { wrap(() => FS.chmod(norm(p), m), p); },
+      };
+    }
+
+    function createIsomorphicGitFs(py, wrap) {
+      const { FS } = py;
+      const toStat = (s) => {
+        const mtimeMs = s.mtime instanceof Date ? s.mtime.getTime() : Number(s.mtime || 0);
+        const ctimeMs = s.ctime instanceof Date ? s.ctime.getTime() : mtimeMs;
+        return {
+          type: FS.isDir(s.mode) ? "dir" : FS.isLink(s.mode) ? "symlink" : "file",
+          mode: s.mode,
+          size: s.size,
+          ino: s.ino,
+          dev: s.dev,
+          uid: s.uid || 0,
+          gid: s.gid || 0,
+          mtimeMs,
+          ctimeMs,
+          isFile: () => FS.isFile(s.mode),
+          isDirectory: () => FS.isDir(s.mode),
+          isSymbolicLink: () => FS.isLink(s.mode),
+        };
+      };
+
+      return {
+        promises: {
+          async readFile(filepath, opts) {
+            const bytes = wrap(() => FS.readFile(filepath), filepath);
+            const enc = typeof opts === "string" ? opts : opts?.encoding;
+            return enc === "utf8" || enc === "utf-8" ? decoder.decode(bytes) : bytes;
+          },
+          async writeFile(filepath, data) {
+            const bytes = typeof data === "string" ? encoder.encode(data) : new Uint8Array(data);
+            wrap(() => FS.writeFile(filepath, bytes), filepath);
+          },
+          async unlink(filepath) { wrap(() => FS.unlink(filepath), filepath); },
+          async readdir(filepath) {
+            return wrap(() => FS.readdir(filepath).filter((n) => n !== "." && n !== ".."), filepath);
+          },
+          async mkdir(filepath, opts) {
+            wrap(() => (opts?.recursive ? FS.mkdirTree(filepath) : FS.mkdir(filepath)), filepath);
+          },
+          async rmdir(filepath) { wrap(() => FS.rmdir(filepath), filepath); },
+          async stat(filepath) { return wrap(() => toStat(FS.stat(filepath)), filepath); },
+          async lstat(filepath) { return wrap(() => toStat(FS.lstat(filepath)), filepath); },
+          async readlink(filepath) { return wrap(() => FS.readlink(filepath), filepath); },
+          async symlink(target, filepath) { wrap(() => FS.symlink(target, filepath), filepath); },
+          async chmod(filepath, mode) { wrap(() => FS.chmod(filepath, mode), filepath); },
+        },
+      };
+    }
+
+    // ---------- fflate + DuckDB Helpers ----------
+    function collectFilesForZip(baseDir, relPrefix = "", out = {}) {
+      for (const name of pyodide.FS.readdir(baseDir)) {
+        if (name === "." || name === ".." || name === ".http_cache" || (baseDir === "/work" && name === "local")) continue;
+        const full = `${baseDir === "/" ? "" : baseDir}/${name}`;
+        const rel = relPrefix ? `${relPrefix}/${name}` : name;
+        const st = pyodide.FS.lstat(full);
+        if (pyodide.FS.isDir(st.mode)) collectFilesForZip(full, rel, out);
+        else if (pyodide.FS.isFile(st.mode)) out[rel] = pyodide.FS.readFile(full);
+      }
+      return out;
+    }
+
+    function collectDataFilesForDuckDb(cwd) {
+      const files = [];
+      const seen = new Set();
+      const dataExt = /\.(csv|tsv|json|jsonl|ndjson|parquet|txt)$/i;
+
+      function scan(dir, relPrefix = "") {
+        let names = [];
+        try { names = pyodide.FS.readdir(dir); } catch { return; }
+        for (const name of names) {
+          if (name === "." || name === ".." || name === ".git" || name === ".http_cache") continue;
+          const full = `${dir === "/" ? "" : dir}/${name}`;
+          const rel = relPrefix ? `${relPrefix}/${name}` : name;
+          const st = pyodide.FS.lstat(full);
+          if (pyodide.FS.isDir(st.mode)) scan(full, rel);
+          else if (pyodide.FS.isFile(st.mode) && dataExt.test(name) && st.size <= 50 * 1024 * 1024) {
+            if (!seen.has(full)) {
+              seen.add(full);
+              files.push({ full, rel, bytes: pyodide.FS.readFile(full) });
+            }
+          }
+        }
+      }
+
+      scan(cwd, "");
+      if (cwd !== "/work") scan("/work", "");
+      return files;
+    }
+
+    async function runDuckDbQuery(sql, cwd, format = "table", preview = false) {
+      const files = collectDataFilesForDuckDb(cwd);
+      const res = await callHost("duckdb-query", { sql, files, format, preview });
+      if (res.writtenFiles?.length) {
+        for (const wf of res.writtenFiles) {
+          const dest = resolvePath(cwd, wf.name);
+          const parent = dest.slice(0, dest.lastIndexOf("/")) || "/";
+          pyodide.FS.mkdirTree(parent);
+          pyodide.FS.writeFile(dest, new Uint8Array(wf.bytes));
+        }
+        await syncIdbfs(false);
+        emitTree();
+      }
+      return res;
+    }
+
+    function safeUnzipBytes(zipBytes, destDir) {
+      const files = fflate.unzipSync(new Uint8Array(zipBytes));
+      let count = 0;
+      for (const [relPath, data] of Object.entries(files)) {
+        if (!relPath || relPath.endsWith("/")) continue;
+        const target = resolvePath(destDir, relPath);
+        if (!target.startsWith(`${destDir}/`) && target !== destDir) continue;
+        const parent = target.slice(0, target.lastIndexOf("/")) || "/";
+        pyodide.FS.mkdirTree(parent);
+        pyodide.FS.writeFile(target, data);
+        count++;
+      }
+      return count;
+    }
+
+    // ---------- isomorphic-git Shell Builtin ----------
+    function listWorktreeFiles(dir, prefix = "", acc = []) {
+      for (const name of pyodide.FS.readdir(dir)) {
+        if (name === "." || name === ".." || name === ".git" || name === ".http_cache") continue;
+        const full = `${dir === "/" ? "" : dir}/${name}`;
+        const rel = prefix ? `${prefix}/${name}` : name;
+        const st = pyodide.FS.lstat(full);
+        if (pyodide.FS.isDir(st.mode)) listWorktreeFiles(full, rel, acc);
+        else if (pyodide.FS.isFile(st.mode)) acc.push(rel);
+      }
+      return acc;
+    }
+
+    async function gitBuiltin(ctx) {
+      const [sub, ...args] = ctx.argv;
+      const dir = ctx.cwd;
+      const author = {
+        name: ctx.env?.GIT_AUTHOR_NAME || "Workbench",
+        email: ctx.env?.GIT_AUTHOR_EMAIL || "user@local",
+      };
+
+      if (!sub || sub === "--help" || sub === "-h") {
+        return [
+          "usage: git <command> [args]  (powered by isomorphic-git)",
+          "  init | status | add <path|.> | rm <path> | commit -m <msg>",
+          "  log [-n N] | branch [name|-d name] | checkout [-b] <ref>",
+          "  diff | config <key> [val] | clone <url> [dir] [--cors-proxy <url>]",
+          "",
+        ].join("\n");
+      }
+
+      switch (sub) {
+        case "init":
+          await git.init({ fs: gitFs, dir, defaultBranch: "main" });
+          return `Initialized empty Git repository in ${dir}/.git/\n`;
+        case "status": {
+          const matrix = await git.statusMatrix({ fs: gitFs, dir });
+          const staged = [], unstaged = [], untracked = [];
+          for (const [filepath, head, workdir, stage] of matrix) {
+            if (filepath.startsWith(".http_cache/")) continue;
+            if (head === 0 && workdir === 2 && stage === 0) untracked.push(filepath);
+            else {
+              if (stage !== head) staged.push(`  ${stage === 0 ? "deleted: " : head === 0 ? "new file:" : "modified:"} ${filepath}`);
+              if (workdir !== stage) unstaged.push(`  ${workdir === 0 ? "deleted: " : "modified:"} ${filepath}`);
+            }
+          }
+          const lines = [];
+          try { lines.push(`On branch ${(await git.currentBranch({ fs: gitFs, dir })) || "(detached HEAD)"}`); } catch {}
+          if (staged.length) lines.push("Changes to be committed:", ...staged);
+          if (unstaged.length) lines.push("Changes not staged for commit:", ...unstaged);
+          if (untracked.length) lines.push("Untracked files:", ...untracked.map((f) => `  ${f}`));
+          if (!staged.length && !unstaged.length && !untracked.length) lines.push("nothing to commit, working tree clean");
+          return lines.join("\n") + "\n";
+        }
+        case "add": {
+          if (!args.length) throw new Error("usage: git add <file|.|-A>");
+          if (args.includes(".") || args.includes("-A") || args.includes("--all")) {
+            const matrix = await git.statusMatrix({ fs: gitFs, dir });
+            for (const [filepath, , workdir] of matrix) {
+              if (filepath.startsWith(".http_cache/")) continue;
+              if (workdir === 0) await git.remove({ fs: gitFs, dir, filepath });
+              else await git.add({ fs: gitFs, dir, filepath });
+            }
+            for (const fp of listWorktreeFiles(dir)) await git.add({ fs: gitFs, dir, filepath: fp });
+          } else {
+            for (const p of args) {
+              const rel = p.replace(/^\.\//, "");
+              const full = resolvePath(dir, rel);
+              if (pyodide.FS.analyzePath(full).exists) await git.add({ fs: gitFs, dir, filepath: rel });
+              else await git.remove({ fs: gitFs, dir, filepath: rel });
+            }
+          }
+          return "";
+        }
+        case "rm": {
+          if (!args.length) throw new Error("usage: git rm <file>");
+          for (const p of args) {
+            const rel = p.replace(/^\.\//, "");
+            await git.remove({ fs: gitFs, dir, filepath: rel });
+            const full = resolvePath(dir, rel);
+            if (pyodide.FS.analyzePath(full).exists) pyodide.FS.unlink(full);
+          }
+          return "";
+        }
+        case "commit": {
+          const mIdx = args.indexOf("-m");
+          const message = mIdx >= 0 ? args[mIdx + 1] : null;
+          if (!message) throw new Error("usage: git commit -m '<message>'");
+          const sha = await git.commit({ fs: gitFs, dir, author, message });
+          return `[${sha.slice(0, 7)}] ${message}\n`;
+        }
+        case "log": {
+          const nIdx = args.indexOf("-n");
+          const depth = nIdx >= 0 ? Number(args[nIdx + 1]) || 10 : 20;
+          const commits = await git.log({ fs: gitFs, dir, depth });
+          return commits.map((c) => {
+            const d = new Date(c.commit.author.timestamp * 1000).toISOString();
+            return `commit ${c.oid}\nAuthor: ${c.commit.author.name} <${c.commit.author.email}>\nDate:   ${d}\n\n    ${c.commit.message.trim()}\n`;
+          }).join("\n");
+        }
+        case "branch": {
+          if (args[0] === "-d" && args[1]) {
+            await git.deleteBranch({ fs: gitFs, dir, ref: args[1] });
+            return `Deleted branch ${args[1]}\n`;
+          }
+          if (args[0]) {
+            await git.branch({ fs: gitFs, dir, ref: args[0] });
+            return `Created branch ${args[0]}\n`;
+          }
+          const cur = await git.currentBranch({ fs: gitFs, dir });
+          const branches = await git.listBranches({ fs: gitFs, dir });
+          return branches.map((b) => `${b === cur ? "* " : "  "}${b}`).join("\n") + "\n";
+        }
+        case "checkout": {
+          if (args[0] === "-b" && args[1]) {
+            await git.branch({ fs: gitFs, dir, ref: args[1], checkout: true });
+            return `Switched to a new branch '${args[1]}'\n`;
+          }
+          if (!args[0]) throw new Error("usage: git checkout [-b] <branch|ref>");
+          await git.checkout({ fs: gitFs, dir, ref: args[0] });
+          return `Switched to '${args[0]}'\n`;
+        }
+        case "diff": {
+          const matrix = await git.statusMatrix({ fs: gitFs, dir });
+          let headOid = null;
+          try { headOid = await git.resolveRef({ fs: gitFs, dir, ref: "HEAD" }); } catch {}
+          const out = [];
+          for (const [filepath, head, workdir] of matrix) {
+            if (head === 1 && workdir === 2) {
+              let oldTxt = "";
+              if (headOid) {
+                try {
+                  const { blob } = await git.readBlob({ fs: gitFs, dir, oid: headOid, filepath });
+                  oldTxt = decoder.decode(blob);
+                } catch {}
+              }
+              const newTxt = decoder.decode(pyodide.FS.readFile(resolvePath(dir, filepath)));
+              const oldL = oldTxt.split("\n"), newL = newTxt.split("\n");
+              out.push(`--- a/${filepath}\n+++ b/${filepath}`);
+              const max = Math.max(oldL.length, newL.length);
+              for (let i = 0; i < max; i++) {
+                if (oldL[i] !== newL[i]) {
+                  if (oldL[i] !== undefined) out.push(`-${oldL[i]}`);
+                  if (newL[i] !== undefined) out.push(`+${newL[i]}`);
+                }
+              }
+            }
+          }
+          return out.length ? out.join("\n") + "\n" : "";
+        }
+        case "config": {
+          const [key, val] = args;
+          if (!key) throw new Error("usage: git config <key> [value]");
+          if (val === undefined) return ((await git.getConfig({ fs: gitFs, dir, path: key })) ?? "") + "\n";
+          await git.setConfig({ fs: gitFs, dir, path: key, value: val });
+          return "";
+        }
+        case "clone": {
+          const url = args[0];
+          if (!url) throw new Error("usage: git clone <url> [dir] [--cors-proxy <url>]");
+          const pIdx = args.indexOf("--cors-proxy");
+          const corsProxy = pIdx >= 0 ? args[pIdx + 1] : undefined;
+          const targetName = (args[1] && !args[1].startsWith("--"))
+            ? args[1]
+            : url.split("/").pop().replace(/\.git$/, "") || "repo";
+          const targetDir = resolvePath(dir, targetName);
+          pyodide.FS.mkdirTree(targetDir);
+          await git.clone({ fs: gitFs, http: gitHttp, dir: targetDir, url, corsProxy, singleBranch: true, depth: 1 });
+          return `Cloned ${url} into ${targetDir}\n`;
+        }
+        default:
+          throw new Error(`git: unsupported subcommand '${sub}' (run 'git --help')`);
+      }
+    }
+
+    // ---------- Starter Workspace ----------
+    function seedStarterFiles() {
+      const closeScript = "<" + "/script>";
+      pyodide.FS.writeFile("/work/README.md", [
+        "# Bashkit + Pyodide 314.0.8 Workbench (COI + SAB)",
+        "",
+        "- **Cross-Origin Isolated (`coi-serviceworker.min.js`)**: enables `SharedArrayBuffer`, true `Ctrl+C` Python `SIGINT`, and multi-threaded DuckDB-WASM pthreads",
+        "- **Scraping CLI**: `scrape`, `crawl`, `curl`, plus Python `import scraper` (`lxml`, `beautifulsoup4`, `html5lib`, `pyodide-http`)",
+        "- **Data & Git**: `duckdb`, `sqlite3`, `git` (`isomorphic-git`), `zip`/`unzip` (`fflate`), `rich` (24-bit ANSI)",
+        "",
+        "## Quick Commands",
+        "```bash",
+        "scrape sample.html --tables --csv > products.csv && duckdb --preview \"SELECT * FROM 'products.csv'\"",
+        "scrape sample.html --xpath '//table[@id=\"products\"]//tr/td[1]/text()'",
+        "python3 analyze.py && preview chart.svg",
+        "git init && git add . && git commit -m 'init' && git log",
+        "```",
+        "",
+      ].join("\n"));
+
+      pyodide.FS.writeFile("/work/sample.html", [
+        "<!doctype html>",
+        "<html lang=\"en\">",
+        "<head>",
+        "  <meta charset=\"utf-8\" />",
+        "  <title>Catalog Benchmarks 2026</title>",
+        "  <meta name=\"description\" content=\"Sample HTML document with OpenGraph, JSON-LD, links, and tables.\" />",
+        "  <meta property=\"og:title\" content=\"Catalog Benchmarks 2026\" />",
+        "  <meta property=\"og:type\" content=\"article\" />",
+        "  <link rel=\"canonical\" href=\"https://example.org/benchmarks/2026\" />",
+        "  <script type=\"application/ld+json\">",
+        "    {\"@context\":\"https://schema.org\",\"@type\":\"Dataset\",\"name\":\"Hardware Benchmarks 2026\",\"version\":\"2.1\"}",
+        "  " + closeScript,
+        "</head>",
+        "<body>",
+        "  <nav><a href=\"/\">Home</a> | <a href=\"/docs\">Docs</a></nav>",
+        "  <main><article>",
+        "    <h1>Hardware Benchmarks 2026</h1>",
+        "    <p>Local-first scraping lets you extract tables, links, and structured JSON-LD without uploading documents to external servers.</p>",
+        "    <table id=\"products\">",
+        "      <thead><tr><th>Model</th><th>Category</th><th>Price_USD</th><th>Score</th></tr></thead>",
+        "      <tbody>",
+        "        <tr><td>Nova-X1</td><td>Workstation</td><td>1899</td><td>94.2</td></tr>",
+        "        <tr><td>Pulse-M4</td><td>Laptop</td><td>1299</td><td>88.7</td></tr>",
+        "        <tr><td>Atlas-900</td><td>Server</td><td>4250</td><td>98.5</td></tr>",
+        "        <tr><td>Echo-Mini</td><td>Edge</td><td>499</td><td>76.1</td></tr>",
+        "      </tbody>",
+        "    </table>",
+        "    <p>Read the <a href=\"/methodology\">methodology</a> or visit <a href=\"https://duckdb.org\">DuckDB</a>.</p>",
+        "  </article></main>",
+        "  <footer>Copyright 2026</footer>",
+        "</body>",
+        "</html>",
+        "",
+      ].join("\n"));
+
+      pyodide.FS.writeFile("/work/sales.csv", [
+        "region,quarter,revenue",
+        "North,Q1,12400",
+        "South,Q1,9800",
+        "East,Q1,15200",
+        "West,Q1,11100",
+        "North,Q2,14900",
+        "South,Q2,11300",
+        "East,Q2,17800",
+        "West,Q2,13400",
+        "",
+      ].join("\n"));
+
+      pyodide.FS.writeFile("/work/analyze.py", [
+        "import csv, sqlite3",
+        "from rich.console import Console",
+        "from rich.table import Table",
+        "import workbench",
+        "",
+        'wc = await workbench.sh("wc -l /work/sales.csv")',
+        'print("From bashkit:", wc.stdout.strip())',
+        "",
+        'con = sqlite3.connect("/work/sales.db")',
+        'con.execute("DROP TABLE IF EXISTS sales")',
+        'con.execute("CREATE TABLE sales (region TEXT, quarter TEXT, revenue INT)")',
+        'with open("/work/sales.csv") as f:',
+        "    rows = [(r['region'], r['quarter'], int(r['revenue'])) for r in csv.DictReader(f)]",
+        'con.executemany("INSERT INTO sales VALUES (?, ?, ?)", rows)',
+        "con.commit()",
+        "",
+        "totals = con.execute(",
+        '    "SELECT region, SUM(revenue) FROM sales GROUP BY region ORDER BY 2 DESC"',
+        ").fetchall()",
+        "",
+        'table = Table(title="Revenue by Region", border_style="bright_blue")',
+        'table.add_column("Region", style="cyan")',
+        'table.add_column("Revenue", justify="right", style="green")',
+        "for region, rev in totals:",
+        '    table.add_row(region, f"${rev:,}")',
+        "Console().print(table)",
+        "",
+        "mx = max(v for _, v in totals)",
+        "bars = []",
+        "for i, (region, rev) in enumerate(totals):",
+        "    y = 40 + i * 42",
+        "    w = int((rev / mx) * 240)",
+        "    bars.append(",
+        '        f\'<text x="12" y="{y+18}" font-family="sans-serif" font-size="13" fill="#222">{region}</text>\'',
+        '        f\'<rect x="75" y="{y}" width="{w}" height="24" rx="4" fill="#3b82f6"/>\'',
+        '        f\'<text x="{83+w}" y="{y+17}" font-family="monospace" font-size="12" fill="#111">${rev:,}</text>\'',
+        "    )",
+        'svg = (\'<svg xmlns="http://www.w3.org/2000/svg" width="410" height="225" viewBox="0 0 410 225">\'',
+        '       \'<text x="12" y="24" font-family="sans-serif" font-size="15" font-weight="600">Revenue by Region</text>\'',
+        '       + "".join(bars) + "</svg>")',
+        'with open("/work/chart.svg", "w") as f:',
+        "    f.write(svg)",
+        'print("Wrote /work/sales.db and /work/chart.svg")',
+        "",
+      ].join("\n"));
+    }
+
+    async function pump(tabId) {
+      const s = sessions.get(tabId);
+      if (!s) return;
+      if (s.running) { s.again = true; return; }
+      s.running = true;
+      try {
+        do {
+          s.again = false;
+          await s.term.runUntilIdle();
+          const out = s.term.takeOutput();
+          if (out.length) sendTermOut(tabId, out);
+        } while (s.again);
+      } catch (err) {
+        sendTermLog(tabId, `\r\n\x1b[31m[terminal error]\x1b[0m ${err?.message || err}\r\n`);
+      } finally {
+        s.running = false;
+      }
+    }
+
+    async function createSession(tabId, rows, cols, banner = "") {
+      currentCols = cols || currentCols;
+      const term = new Terminal({ rows, cols, cwd: "/work", fs: sharedFs, customBuiltins });
+      sessions.set(tabId, { term, running: false, again: false });
+      if (banner) sendTermOut(tabId, banner);
+      await pump(tabId);
+    }
+
+    // Install packages individually (Pyodide bundled first, micropip fallback) so one failure never rolls back others
+    async function ensurePythonPackage(pkg, tabId) {
+      try {
+        await pyodide.loadPackage(pkg);
+        return true;
+      } catch {}
+      try {
+        const micropip = pyodide.pyimport("micropip");
+        try {
+          await micropip.install(pkg);
+          return true;
+        } finally {
+          micropip.destroy();
+        }
+      } catch (e) {
+        const shortErr = String(e?.message || e).split("\n").filter(Boolean).pop() || String(e);
+        sendTermLog(tabId, `\x1b[33m[warn]\x1b[0m skipped ${pkg}: ${shortErr}\n`);
+        return false;
+      }
+    }
+
+    // ---------- Boot ----------
+    async function boot(firstTabId, rows, cols, shareZipBytes, savedProxy, controlSab) {
+      currentCols = cols || 100;
+      defaultCorsProxy = savedProxy || "";
+      if (controlSab) {
+        interruptView = new Int32Array(controlSab, 0, 1);
+        stateView = new Int32Array(controlSab, 4, 1);
+        Atomics.store(interruptView, 0, 0);
+        Atomics.store(stateView, 0, 0);
+      }
+
+      try {
+        sendTermOut(firstTabId, "\x1b[36m[1/5]\x1b[0m Loading @everruns/bashkit-wasm...\r\n");
+        sendStatus("Loading Bashkit WASM…");
+        await initBashkit();
+
+        sendTermOut(firstTabId, "\x1b[36m[2/5]\x1b[0m Loading Pyodide 314.0.8 + micropip...\r\n");
+        sendStatus("Loading Pyodide 314.0.8…");
+        pyodide = await loadPyodide();
+        if (interruptView) pyodide.setInterruptBuffer(interruptView);
+        await pyodide.loadPackage("micropip");
+
+        sendTermOut(firstTabId, "\x1b[36m[3/5]\x1b[0m Loading beautifulsoup4, lxml, html5lib, rich & pyodide-http...\r\n");
+        sendStatus("Loading Python stack…");
+        await ensurePythonPackage("beautifulsoup4", firstTabId);
+        await ensurePythonPackage("lxml", firstTabId);
+        await ensurePythonPackage("html5lib", firstTabId);
+        await ensurePythonPackage("rich", firstTabId);
+        if (await ensurePythonPackage("pyodide-http", firstTabId)) {
+          await pyodide.runPythonAsync("import pyodide_http; pyodide_http.patch_all()");
+        }
+
+        sendTermOut(firstTabId, "\x1b[36m[4/5]\x1b[0m Mounting persistent IDBFS at /work...\r\n");
+        sendStatus("Mounting /work…");
+        pyodide.FS.mkdirTree("/work");
+        try {
+          pyodide.FS.mount(pyodide.FS.filesystems.IDBFS, {}, "/work");
+          await syncIdbfs(true);
+          idbfsActive = true;
+        } catch {
+          idbfsActive = false;
+        }
+        self.postMessage({ type: "persist-mode", mode: idbfsActive ? "IDBFS" : "MEMFS" });
+
+        if (shareZipBytes) {
+          const n = safeUnzipBytes(shareZipBytes, "/work");
+          sendTermOut(firstTabId, `\x1b[32mLoaded ${n} shared file(s) from URL hash.\x1b[0m\r\n`);
+          await syncIdbfs(false);
+        } else {
+          const existing = pyodide.FS.readdir("/work").filter((n) => n !== "." && n !== "..");
+          if (existing.length === 0) {
+            seedStarterFiles();
+            await syncIdbfs(false);
+          }
+        }
+
+        sendTermOut(firstTabId, "\x1b[36m[5/5]\x1b[0m Wiring scraping engine, DuckDB, Git, fflate & workbench...\r\n\r\n");
+        const wrap = makeErrnoWrapper(pyodide);
+        sharedFs = createPyodideFsAdapter(pyodide, wrap);
+        gitFs = createIsomorphicGitFs(pyodide, wrap);
+
+        Object.assign(pyodide.FS.trackingDelegate, {
+          onWriteToFile: (path) => onFsMutated(path),
+          onMovePath: (_a, b) => onFsMutated(b),
+          onDeletePath: (path) => onFsMutated(path),
+          onMakeDirectory: (path) => onFsMutated(path),
+        });
+
+        pyBash = new Bash({ cwd: "/work", fs: sharedFs });
+        const bridgeApi = {
+          async sh(cmd) {
+            const res = await pyBash.execute(String(cmd));
+            return { stdout: res.stdout, stderr: res.stderr, exit_code: res.exitCode };
+          },
+          analyze: (script) => pyBash.analyze(String(script)),
+        };
+        pyodide.registerJsModule("bashkit_bridge", bridgeApi);
+        pyodide.registerJsModule("workbench", {
+          ...bridgeApi,
+          async duckdb(sql) {
+            const res = await runDuckDbQuery(String(sql), "/work", "json", false);
+            return { columns: res.columns, rows: res.rows, records: res.records };
+          },
+          async preview(path) {
+            const full = resolvePath("/work", String(path));
+            const bytes = wrap(() => pyodide.FS.readFile(full), full);
+            await callHost("preview-file", { path: full, bytes });
+          },
+          async show_html(html, title = "HTML Output") {
+            await callHost("preview-virtual", { kind: "html", title: String(title), data: String(html) });
+          },
+          async show_svg(svg, title = "SVG Output") {
+            await callHost("preview-virtual", { kind: "svg", title: String(title), data: String(svg) });
+          },
+          async show_table(rowsProxy, headersProxy = null, title = "Table") {
+            await callHost("preview-virtual", {
+              kind: "table",
+              title: String(title),
+              rows: rowsProxy?.toJs ? rowsProxy.toJs() : rowsProxy,
+              headers: headersProxy?.toJs ? headersProxy.toJs() : headersProxy,
+            });
+          },
+          async download(name, data) {
+            const bytes = typeof data === "string"
+              ? encoder.encode(data)
+              : (data?.toJs ? new Uint8Array(data.toJs()) : new Uint8Array(data));
+            await callHost("download", { name: String(name), bytes });
+          },
+          async notify(text) { sendStatus(String(text), "ready"); },
+        });
+
+        await pyodide.runPythonAsync(`
+import ast, asyncio, contextlib, csv, hashlib, inspect, io, json, os, re, sqlite3, sys, tarfile, time, traceback, types
+import xml.etree.ElementTree as ET
+from urllib.parse import quote, urljoin, urlparse
+from urllib.robotparser import RobotFileParser
+from bs4 import BeautifulSoup
+from pyodide.http import pyfetch
+
+try:
+    import lxml.html as _lxml_html
+    HAS_LXML = True
+except Exception:
+    _lxml_html = None
+    HAS_LXML = False
+
+_DEFAULT_PROXY = ""
+
+def _set_default_proxy(p):
+    global _DEFAULT_PROXY
+    _DEFAULT_PROXY = (p or "").strip()
+
+def _proxify(url, proxy=None):
+    p = (proxy if proxy is not None else os.environ.get("CORS_PROXY") or _DEFAULT_PROXY).strip()
+    if not p:
+        return url
+    if "{url}" in p:
+        return p.replace("{url}", quote(url, safe=""))
+    if p.endswith("=") or p.endswith("?"):
+        return p + quote(url, safe="")
+    return (p + url) if p.endswith("/") else (p + "/" + url)
+
+def _make_soup(html_text, parser=None):
+    if parser:
+        return BeautifulSoup(html_text, parser)
+    return BeautifulSoup(html_text, "lxml" if HAS_LXML else "html.parser")
+
+def _parse_tables(html_text):
+    soup = _make_soup(html_text)
+    results = []
+    for table in soup.find_all("table"):
+        rows, headers = [], []
+        thead = table.find("thead")
+        if thead:
+            headers = [c.get_text(" ", strip=True) for c in thead.find_all(["th", "td"])]
+        for tr in table.find_all("tr"):
+            if thead and tr.find_parent("thead"):
+                continue
+            cells = [c.get_text(" ", strip=True) for c in tr.find_all(["th", "td"])]
+            if not cells:
+                continue
+            if not headers and tr.find_all("th") and not rows:
+                headers = cells
+            else:
+                rows.append(cells)
+        if not headers and rows:
+            headers = [f"col_{i+1}" for i in range(len(rows[0]))]
+        width = max([len(headers)] + [len(r) for r in rows] + [0])
+        if width == 0:
+            continue
+        headers = headers + [f"col_{i+1}" for i in range(len(headers), width)]
+        norm_rows = [r + [""] * (width - len(r)) for r in rows]
+        results.append({"headers": headers, "rows": norm_rows, "records": [dict(zip(headers, r)) for r in norm_rows]})
+    return results
+
+def _parse_links(html_text, base_url=""):
+    soup = _make_soup(html_text)
+    out, seen = [], set()
+    for a in soup.find_all("a", href=True):
+        raw = a["href"].strip()
+        if not raw or raw.startswith(("javascript:", "mailto:", "tel:", "#")):
+            continue
+        abs_url = urljoin(base_url, raw) if base_url else raw
+        key = (abs_url, a.get_text(" ", strip=True))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"text": key[1], "href": raw, "url": abs_url})
+    return out
+
+def _parse_meta(html_text, base_url=""):
+    soup = _make_soup(html_text)
+    title = soup.title.get_text(" ", strip=True) if soup.title else ""
+    desc_tag = soup.find("meta", attrs={"name": re.compile("^description$", re.I)})
+    canon_tag = soup.find("link", attrs={"rel": lambda v: v and "canonical" in (v if isinstance(v, list) else [v])})
+    og, twitter, json_ld = {}, {}, []
+    for m in soup.find_all("meta"):
+        prop = (m.get("property") or m.get("name") or "").strip()
+        content = (m.get("content") or "").strip()
+        if not prop or not content:
+            continue
+        if prop.startswith("og:"): og[prop[3:]] = content
+        elif prop.startswith("twitter:"): twitter[prop[8:]] = content
+    for sc in soup.find_all("script", attrs={"type": re.compile("ld\\+json", re.I)}):
+        raw = (sc.string or sc.get_text() or "").strip()
+        if raw:
+            try: json_ld.append(json.loads(raw))
+            except Exception: json_ld.append({"raw": raw})
+    canonical = canon_tag.get("href", "").strip() if canon_tag else ""
+    if canonical and base_url:
+        canonical = urljoin(base_url, canonical)
+    return {
+        "title": title,
+        "description": desc_tag.get("content", "").strip() if desc_tag else "",
+        "canonical": canonical, "og": og, "twitter": twitter, "json_ld": json_ld,
+    }
+
+def _extract_article(html_text):
+    soup = _make_soup(html_text)
+    for tag in soup.find_all(["script", "style", "noscript", "nav", "footer", "aside", "svg", "iframe"]):
+        tag.decompose()
+    root = soup.find("article") or soup.find("main") or soup.body or soup
+    lines = []
+    for el in root.find_all(["h1", "h2", "h3", "h4", "p", "li", "pre", "blockquote"]):
+        txt = el.get_text(" ", strip=True)
+        if not txt:
+            continue
+        if el.name in ("h1", "h2", "h3", "h4"): lines.append("#" * int(el.name[1]) + " " + txt)
+        elif el.name == "li": lines.append("- " + txt)
+        elif el.name == "blockquote": lines.append("> " + txt)
+        else: lines.append(txt)
+    return "\\n\\n".join(lines) if lines else root.get_text("\\n", strip=True)
+
+def _parse_feed(xml_text):
+    root = ET.fromstring(xml_text.strip())
+    items = []
+    for item in root.findall(".//item"):
+        items.append({
+            "title": (item.findtext("title") or "").strip(),
+            "link": (item.findtext("link") or "").strip(),
+            "published": (item.findtext("pubDate") or "").strip(),
+            "summary": BeautifulSoup(item.findtext("description") or "", "html.parser").get_text(" ", strip=True)[:240],
+        })
+    if items:
+        return items
+    ns = {"a": "http://www.w3.org/2005/Atom"}
+    for entry in root.findall(".//a:entry", ns) or root.findall(".//entry"):
+        link_el = entry.find("a:link", ns)
+        if link_el is None: link_el = entry.find("link")
+        href = link_el.get("href", "") if link_el is not None else ""
+        items.append({
+            "title": (entry.findtext("a:title", "", ns) or entry.findtext("title", "")).strip(),
+            "link": href.strip(),
+            "published": (entry.findtext("a:updated", "", ns) or entry.findtext("updated", "") or entry.findtext("a:published", "", ns) or "").strip(),
+            "summary": BeautifulSoup(entry.findtext("a:summary", "", ns) or entry.findtext("summary", ""), "html.parser").get_text(" ", strip=True)[:240],
+        })
+    return items
+
+def _parse_sitemap(xml_text):
+    root = ET.fromstring(xml_text.strip())
+    entries = []
+    for el in root.iter():
+        tag = el.tag.split("}")[-1]
+        if tag in ("url", "sitemap"):
+            loc = lastmod = priority = ""
+            for child in el:
+                ctag = child.tag.split("}")[-1]
+                if ctag == "loc": loc = (child.text or "").strip()
+                elif ctag == "lastmod": lastmod = (child.text or "").strip()
+                elif ctag == "priority": priority = (child.text or "").strip()
+            if loc:
+                entries.append({"type": tag, "loc": loc, "lastmod": lastmod, "priority": priority})
+    return entries
+
+class ScrapeResponse:
+    def __init__(self, url, status, headers, text, elapsed_ms=0):
+        self.url, self.status, self.headers, self.text, self.elapsed_ms = url, status, headers, text, elapsed_ms
+    def json(self): return json.loads(self.text)
+    def soup(self, parser=None): return _make_soup(self.text, parser)
+    def select(self, css): return self.soup().select(css)
+    def xpath(self, expr):
+        if not HAS_LXML:
+            raise RuntimeError("XPath requires lxml")
+        vals = _lxml_html.fromstring(self.text).xpath(expr)
+        return [v.text_content().strip() if hasattr(v, "text_content") else str(v) for v in vals]
+    def links(self): return _parse_links(self.text, self.url)
+    def tables(self): return _parse_tables(self.text)
+    def meta(self): return _parse_meta(self.text, self.url)
+    def article(self): return _extract_article(self.text)
+    def feed(self): return _parse_feed(self.text)
+    def sitemap(self): return _parse_sitemap(self.text)
+
+async def _fetch_cached(url, *, method="GET", headers=None, body=None, proxy=None, cache_ttl=300):
+    cache_dir = "/work/.http_cache"
+    cache_path = None
+    if method.upper() == "GET" and cache_ttl and cache_ttl > 0:
+        os.makedirs(cache_dir, exist_ok=True)
+        key = hashlib.sha256(f"{url}|{proxy or ''}".encode()).hexdigest()[:20]
+        cache_path = os.path.join(cache_dir, f"{key}.json")
+        if os.path.exists(cache_path):
+            try:
+                with open(cache_path, "r", encoding="utf-8") as f:
+                    cached = json.load(f)
+                if time.time() - cached.get("ts", 0) <= cache_ttl:
+                    return ScrapeResponse(url, cached["status"], cached["headers"], cached["text"], 0)
+            except Exception:
+                pass
+    target = _proxify(url, proxy)
+    t0 = time.time()
+    opts = {"method": method}
+    if headers: opts["headers"] = headers
+    if body is not None: opts["body"] = body
+    resp = await pyfetch(target, **opts)
+    text = await resp.string()
+    elapsed_ms = int((time.time() - t0) * 1000)
+    hdrs = dict(resp.headers.items()) if hasattr(resp, "headers") else {}
+    res = ScrapeResponse(url, resp.status, hdrs, text, elapsed_ms)
+    if cache_path and 200 <= resp.status < 300:
+        try:
+            with open(cache_path, "w", encoding="utf-8") as f:
+                json.dump({"ts": time.time(), "url": url, "status": resp.status, "headers": hdrs, "text": text}, f)
+        except Exception:
+            pass
+    return res
+
+async def _fetch_many(urls, *, concurrency=4, delay=0.1, proxy=None, cache_ttl=300, headers=None):
+    sem = asyncio.Semaphore(max(1, int(concurrency)))
+    async def one(u):
+        async with sem:
+            if delay > 0: await asyncio.sleep(delay)
+            try: return await _fetch_cached(u, proxy=proxy, cache_ttl=cache_ttl, headers=headers)
+            except Exception as e: return ScrapeResponse(u, 0, {}, f"ERROR: {e}", 0)
+    return await asyncio.gather(*(one(u) for u in urls))
+
+async def _crawl(start_url, *, max_pages=10, max_depth=2, same_origin=True, concurrency=3, delay=0.2, respect_robots=True, proxy=None, cache_ttl=300):
+    parsed_start = urlparse(start_url)
+    origin = (parsed_start.scheme, parsed_start.netloc)
+    rp = None
+    if respect_robots:
+        try:
+            r = await _fetch_cached(f"{parsed_start.scheme}://{parsed_start.netloc}/robots.txt", proxy=proxy, cache_ttl=600)
+            if r.status == 200:
+                rp = RobotFileParser()
+                rp.parse(r.text.splitlines())
+        except Exception:
+            rp = None
+    visited, frontier, results = {start_url}, [(start_url, 0)], []
+    sem = asyncio.Semaphore(max(1, int(concurrency)))
+
+    async def visit(url, depth):
+        async with sem:
+            if delay > 0 and results: await asyncio.sleep(delay)
+            if rp and not rp.can_fetch("*", url):
+                return {"url": url, "depth": depth, "status": 403, "title": "(blocked by robots.txt)", "h1": "", "links": 0, "bytes": 0, "ms": 0}, []
+            try:
+                resp = await _fetch_cached(url, proxy=proxy, cache_ttl=cache_ttl)
+                soup = resp.soup()
+                title = soup.title.get_text(" ", strip=True) if soup.title else ""
+                h1 = soup.h1.get_text(" ", strip=True) if soup.h1 else ""
+                links = resp.links()
+                next_urls = []
+                if depth < max_depth:
+                    for lk in links:
+                        u = lk["url"].split("#")[0]
+                        pu = urlparse(u)
+                        if pu.scheme not in ("http", "https"): continue
+                        if same_origin and (pu.scheme, pu.netloc) != origin: continue
+                        next_urls.append((u, depth + 1))
+                return {
+                    "url": url, "depth": depth, "status": resp.status,
+                    "title": title[:120], "h1": h1[:120],
+                    "links": len(links), "bytes": len(resp.text.encode("utf-8")), "ms": resp.elapsed_ms,
+                }, next_urls
+            except Exception as e:
+                return {"url": url, "depth": depth, "status": 0, "title": f"ERROR: {e}", "h1": "", "links": 0, "bytes": 0, "ms": 0}, []
+
+    while frontier and len(results) < max_pages:
+        batch = frontier[:max(1, min(concurrency, max_pages - len(results)))]
+        frontier = frontier[len(batch):]
+        for rec, next_urls in await asyncio.gather(*(visit(u, d) for u, d in batch)):
+            results.append(rec)
+            for nu, nd in next_urls:
+                if nu not in visited and len(visited) < max_pages * 3:
+                    visited.add(nu)
+                    frontier.append((nu, nd))
+    return results
+
+_scraper_mod = types.ModuleType("scraper")
+_scraper_mod.fetch = _fetch_cached
+_scraper_mod.fetch_many = _fetch_many
+_scraper_mod.crawl = _crawl
+_scraper_mod.parse_tables = _parse_tables
+_scraper_mod.parse_links = _parse_links
+_scraper_mod.parse_meta = _parse_meta
+_scraper_mod.parse_feed = _parse_feed
+_scraper_mod.parse_sitemap = _parse_sitemap
+_scraper_mod.extract_article = _extract_article
+_scraper_mod.ScrapeResponse = ScrapeResponse
+_scraper_mod.HAS_LXML = HAS_LXML
+sys.modules["scraper"] = _scraper_mod
+
+async def _scrape_cli(argv, cwd, stdin_text, env_dict):
+    import workbench
+    if not argv or "-h" in argv or "--help" in argv:
+        return (
+            "usage: scrape <url|file|-> [css_selector] [options]\\n"
+            "  --attr <name>       Extract attribute instead of text\\n"
+            "  --html              Output matched HTML\\n"
+            "  --count             Count matching elements\\n"
+            "  --xpath <expr>      Query with XPath (lxml)\\n"
+            "  --tables            Extract HTML <table>s (--table-index N)\\n"
+            "  --links             Extract resolved hyperlinks\\n"
+            "  --meta              Extract title, OpenGraph, Twitter, JSON-LD\\n"
+            "  --article           Extract readable main text as Markdown\\n"
+            "  --rss               Parse RSS 2.0 / Atom XML feed\\n"
+            "  --sitemap           Parse sitemap.xml URLs\\n"
+            "  --robots            Fetch & summarize robots.txt\\n"
+            "  --json | --csv      Format output for jq / duckdb\\n"
+            "  --preview           Open table/text output in Preview pane\\n"
+            "  --proxy <prefix>    Override CORS_PROXY\\n"
+            "  --no-cache          Bypass /work/.http_cache\\n",
+            "", 0,
+        )
+    old_cwd, old_env = os.getcwd(), os.environ.copy()
+    try:
+        os.chdir(cwd)
+        os.environ.update(env_dict)
+        opts = {
+            "attr": None, "html": False, "count": False, "xpath": None,
+            "tables": False, "table_index": None, "links": False, "meta": False,
+            "article": False, "rss": False, "sitemap": False, "robots": False,
+            "json": False, "csv": False, "preview": False, "proxy": None, "no_cache": False,
+        }
+        pos, i = [], 0
+        while i < len(argv):
+            a = argv[i]
+            if a == "--attr" and i + 1 < len(argv): opts["attr"] = argv[i + 1]; i += 2
+            elif a == "--xpath" and i + 1 < len(argv): opts["xpath"] = argv[i + 1]; i += 2
+            elif a == "--table-index" and i + 1 < len(argv): opts["table_index"] = int(argv[i + 1]); i += 2
+            elif a == "--proxy" and i + 1 < len(argv): opts["proxy"] = argv[i + 1]; i += 2
+            elif a == "--html": opts["html"] = True; i += 1
+            elif a == "--count": opts["count"] = True; i += 1
+            elif a == "--tables": opts["tables"] = True; i += 1
+            elif a == "--links": opts["links"] = True; i += 1
+            elif a == "--meta": opts["meta"] = True; i += 1
+            elif a == "--article": opts["article"] = True; i += 1
+            elif a == "--rss": opts["rss"] = True; i += 1
+            elif a == "--sitemap": opts["sitemap"] = True; i += 1
+            elif a == "--robots": opts["robots"] = True; i += 1
+            elif a == "--json": opts["json"] = True; i += 1
+            elif a == "--csv": opts["csv"] = True; i += 1
+            elif a == "--preview": opts["preview"] = True; i += 1
+            elif a == "--no-cache": opts["no_cache"] = True; i += 1
+            else: pos.append(a); i += 1
+
+        source = pos[0] if pos else "-"
+        selector = pos[1] if len(pos) > 1 else None
+        if source == "-" or (stdin_text and not source.startswith(("http://", "https://")) and not os.path.exists(source)):
+            if stdin_text and source != "-":
+                selector, source = source, "-"
+
+        base_url = ""
+        ttl = 0 if opts["no_cache"] else 300
+        if source == "-":
+            raw = stdin_text or ""
+        elif source.startswith(("http://", "https://")):
+            base_url = source
+            if opts["robots"]:
+                p = urlparse(source)
+                resp = await _fetch_cached(f"{p.scheme}://{p.netloc}/robots.txt", proxy=opts["proxy"], cache_ttl=ttl)
+                return (resp.text + ("\\n" if not resp.text.endswith("\\n") else ""), "", 0)
+            resp = await _fetch_cached(source, proxy=opts["proxy"], cache_ttl=ttl)
+            if resp.status >= 400:
+                return ("", f"scrape: HTTP {resp.status} for {source}\\n", 1)
+            raw = resp.text
+        else:
+            with open(source, "r", encoding="utf-8", errors="replace") as f:
+                raw = f.read()
+
+        def to_csv(headers, rows):
+            buf = io.StringIO()
+            w = csv.writer(buf); w.writerow(headers); w.writerows(rows)
+            return buf.getvalue()
+
+        if opts["meta"]:
+            return (json.dumps(_parse_meta(raw, base_url), indent=2, ensure_ascii=False) + "\\n", "", 0)
+        if opts["article"]:
+            txt = _extract_article(raw)
+            if opts["preview"]:
+                await workbench.show_html(f"<pre style='white-space:pre-wrap;font-family:system-ui;padding:12px'>{txt}</pre>", "Article")
+            return (txt + "\\n", "", 0)
+        if opts["rss"]:
+            items = _parse_feed(raw)
+            if opts["preview"] and items:
+                await workbench.show_table([[x["title"], x["published"], x["link"]] for x in items], ["Title", "Published", "Link"], "Feed")
+            if opts["csv"] and items:
+                return (to_csv(["title", "published", "link", "summary"], [[x["title"], x["published"], x["link"], x["summary"]] for x in items]), "", 0)
+            return (json.dumps(items, indent=2, ensure_ascii=False) + "\\n", "", 0)
+        if opts["sitemap"]:
+            items = _parse_sitemap(raw)
+            if opts["preview"] and items:
+                await workbench.show_table([[x["type"], x["loc"], x["lastmod"]] for x in items], ["Type", "URL", "LastMod"], "Sitemap")
+            if opts["json"]: return (json.dumps(items, indent=2) + "\\n", "", 0)
+            return ("\\n".join(x["loc"] for x in items) + ("\\n" if items else ""), "", 0)
+        if opts["links"]:
+            links = _parse_links(raw, base_url)
+            if opts["preview"] and links:
+                await workbench.show_table([[l["text"], l["url"]] for l in links], ["Text", "URL"], f"Links ({len(links)})")
+            if opts["json"]: return (json.dumps(links, indent=2, ensure_ascii=False) + "\\n", "", 0)
+            if opts["csv"]: return (to_csv(["text", "url"], [[l["text"], l["url"]] for l in links]), "", 0)
+            return ("\\n".join(f'{l["url"]}\\t{l["text"]}' for l in links) + ("\\n" if links else ""), "", 0)
+        if opts["tables"]:
+            tables = _parse_tables(raw)
+            if not tables: return ("", "scrape: no <table> elements found\\n", 1)
+            idx = opts["table_index"] if opts["table_index"] is not None else 0
+            if idx < 0 or idx >= len(tables): return ("", f"scrape: table index {idx} out of range (found {len(tables)})\\n", 1)
+            t = tables[idx]
+            if opts["preview"]:
+                await workbench.show_table(t["rows"], t["headers"], f"Table #{idx} ({len(t['rows'])} rows)")
+            if opts["csv"]: return (to_csv(t["headers"], t["rows"]), "", 0)
+            return (json.dumps(t["records"] if opts["table_index"] is not None or len(tables) == 1 else tables, indent=2, ensure_ascii=False) + "\\n", "", 0)
+        if opts["xpath"]:
+            vals = ScrapeResponse(base_url, 200, {}, raw).xpath(opts["xpath"])
+            if opts["count"]: return (f"{len(vals)}\\n", "", 0)
+            if opts["json"]: return (json.dumps(vals, indent=2, ensure_ascii=False) + "\\n", "", 0)
+            return ("\\n".join(vals) + ("\\n" if vals else ""), "", 0)
+        if not selector:
+            return ("", "scrape: specify a CSS selector or mode (--tables, --links, --meta, --article, --rss, --sitemap, --xpath)\\n", 1)
+
+        matches = _make_soup(raw).select(selector)
+        if opts["count"]: return (f"{len(matches)}\\n", "", 0)
+        if opts["json"]:
+            items = [{
+                "tag": m.name, "text": m.get_text(" ", strip=True),
+                "attrs": {k: (v if isinstance(v, str) else " ".join(v)) for k, v in m.attrs.items()},
+                "html": str(m),
+            } for m in matches]
+            return (json.dumps(items, indent=2, ensure_ascii=False) + "\\n", "", 0)
+        lines = []
+        for m in matches:
+            if opts["html"]: lines.append(str(m))
+            elif opts["attr"]:
+                val = m.get(opts["attr"])
+                if val is not None:
+                    val = " ".join(val) if isinstance(val, list) else str(val)
+                    if opts["attr"] in ("href", "src") and base_url: val = urljoin(base_url, val)
+                    lines.append(val)
+            else:
+                lines.append(m.get_text(" ", strip=True))
+        return ("\\n".join(lines) + ("\\n" if lines else ""), "", 0)
+    except Exception as e:
+        return ("", f"scrape: {e}\\n", 1)
+    finally:
+        os.chdir(old_cwd)
+        os.environ.clear()
+        os.environ.update(old_env)
+
+async def _crawl_cli(argv, cwd, env_dict):
+    import workbench
+    if not argv or "-h" in argv or "--help" in argv:
+        return (
+            "usage: crawl <start_url> [options]\\n"
+            "  --max-pages N       Max pages to fetch (default: 10)\\n"
+            "  --depth D           Max link depth (default: 2)\\n"
+            "  --concurrency C     Concurrent async requests (default: 3)\\n"
+            "  --delay SEC         Delay between requests (default: 0.2)\\n"
+            "  --all-origins       Allow crawling external domains\\n"
+            "  --no-robots         Skip robots.txt check\\n"
+            "  --proxy <prefix>    Override CORS_PROXY\\n"
+            "  -o <file.jsonl>     Save JSONL crawl report\\n"
+            "  --preview           Open crawl report in Preview pane\\n",
+            "", 0,
+        )
+    old_cwd, old_env = os.getcwd(), os.environ.copy()
+    try:
+        os.chdir(cwd)
+        os.environ.update(env_dict)
+        url, max_pages, depth, conc, delay = None, 10, 2, 3, 0.2
+        same_origin, robots, proxy, out_file, preview = True, True, None, None, False
+        i = 0
+        while i < len(argv):
+            a = argv[i]
+            if a == "--max-pages": max_pages = int(argv[i + 1]); i += 2
+            elif a == "--depth": depth = int(argv[i + 1]); i += 2
+            elif a == "--concurrency": conc = int(argv[i + 1]); i += 2
+            elif a == "--delay": delay = float(argv[i + 1]); i += 2
+            elif a == "--proxy": proxy = argv[i + 1]; i += 2
+            elif a == "-o": out_file = argv[i + 1]; i += 2
+            elif a == "--all-origins": same_origin = False; i += 1
+            elif a == "--no-robots": robots = False; i += 1
+            elif a == "--preview": preview = True; i += 1
+            else: url = a; i += 1
+        if not url: return ("", "crawl: missing <start_url>\\n", 1)
+        rows = await _crawl(
+            url, max_pages=max_pages, max_depth=depth, same_origin=same_origin,
+            concurrency=conc, delay=delay, respect_robots=robots, proxy=proxy,
+        )
+        jsonl = "\\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + ("\\n" if rows else "")
+        if out_file:
+            with open(out_file, "w", encoding="utf-8") as f: f.write(jsonl)
+        if preview and rows:
+            await workbench.show_table(
+                [[r["status"], r["depth"], r["links"], r["ms"], r["title"], r["url"]] for r in rows],
+                ["Status", "Depth", "Links", "ms", "Title", "URL"],
+                f"Crawl ({len(rows)} pages)",
+            )
+        return (jsonl, "", 0)
+    except Exception as e:
+        return ("", f"crawl: {e}\\n", 1)
+    finally:
+        os.chdir(old_cwd)
+        os.environ.clear()
+        os.environ.update(old_env)
+
+async def _run_cli(argv, cwd, stdin_text, env_dict, cols):
+    old_cwd, old_argv, old_stdin, old_env = os.getcwd(), sys.argv[:], sys.stdin, os.environ.copy()
+    out, err = io.StringIO(), io.StringIO()
+    code = 0
+    flags = ast.PyCF_ALLOW_TOP_LEVEL_AWAIT
+    try:
+        os.chdir(cwd)
+        os.environ.update(env_dict)
+        if _DEFAULT_PROXY and "CORS_PROXY" not in os.environ:
+            os.environ["CORS_PROXY"] = _DEFAULT_PROXY
+        os.environ.setdefault("FORCE_COLOR", "1")
+        os.environ.setdefault("COLORTERM", "truecolor")
+        os.environ.setdefault("TERM", "xterm-256color")
+        os.environ["COLUMNS"] = str(cols)
+        sys.stdin = io.StringIO(stdin_text or "")
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            if len(argv) >= 1 and argv[0] in ("-V", "--version"):
+                print(f"Python {sys.version.split()[0]} (Pyodide Worker)")
+            elif len(argv) >= 2 and argv[0] == "-c":
+                sys.argv = ["-c", *argv[2:]]
+                res = eval(compile(argv[1], "<string>", "exec", flags=flags), {"__name__": "__main__"})
+                if inspect.iscoroutine(res): await res
+            elif len(argv) >= 1:
+                path = os.path.abspath(argv[0])
+                sys.argv = list(argv)
+                with open(path, "r", encoding="utf-8") as f: src = f.read()
+                res = eval(compile(src, path, "exec", flags=flags), {"__name__": "__main__", "__file__": path})
+                if inspect.iscoroutine(res): await res
+            elif stdin_text:
+                sys.argv = [""]
+                res = eval(compile(stdin_text, "<stdin>", "exec", flags=flags), {"__name__": "__main__"})
+                if inspect.iscoroutine(res): await res
+            else:
+                print(f"Python {sys.version.split()[0]} — use: python3 -c '...' | python3 script.py")
+    except KeyboardInterrupt:
+        print("KeyboardInterrupt", file=err)
+        code = 130
+    except SystemExit as e:
+        code = e.code if isinstance(e.code, int) else (1 if e.code else 0)
+    except BaseException:
+        traceback.print_exc(file=err)
+        code = 1
+    finally:
+        os.chdir(old_cwd)
+        os.environ.clear()
+        os.environ.update(old_env)
+        sys.argv = old_argv
+        sys.stdin = old_stdin
+    return (out.getvalue(), err.getvalue(), code)
+
+def _run_sqlite(db_path, sql, cwd):
+    old_cwd = os.getcwd()
+    try:
+        os.chdir(cwd)
+        con = sqlite3.connect(db_path)
+        cur = con.cursor()
+        out = []
+        for stmt in [s.strip() for s in sql.split(";") if s.strip()]:
+            cur.execute(stmt)
+            if cur.description:
+                out.append("|".join(d[0] for d in cur.description))
+                for row in cur.fetchall():
+                    out.append("|".join("" if v is None else str(v) for v in row))
+        con.commit()
+        con.close()
+        return "\\n".join(out) + ("\\n" if out else "")
+    finally:
+        os.chdir(old_cwd)
+
+def _safe_extract_tar(raw_bytes, dest="/work"):
+    dest_real = os.path.realpath(dest)
+    count = 0
+    with tarfile.open(fileobj=io.BytesIO(bytes(raw_bytes)), mode="r:*") as tf:
+        for m in tf.getmembers():
+            if not m.isfile(): continue
+            clean = m.name.lstrip("/")
+            if clean.startswith("work/"): clean = clean[5:]
+            target = os.path.realpath(os.path.join(dest_real, clean))
+            if not target.startswith(dest_real + os.sep): continue
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            src = tf.extractfile(m)
+            if src:
+                with open(target, "wb") as dst: dst.write(src.read())
+                count += 1
+    return count
+`);
+
+        pyodide.globals.get("_set_default_proxy")(defaultCorsProxy);
+        const runCli = pyodide.globals.get("_run_cli");
+        const runSqlite = pyodide.globals.get("_run_sqlite");
+        const scrapeCli = pyodide.globals.get("_scrape_cli");
+        const crawlCli = pyodide.globals.get("_crawl_cli");
+
+        async function pythonBuiltin(ctx) {
+          if (interruptView) Atomics.store(interruptView, 0, 0);
+          if (stateView) Atomics.store(stateView, 0, 1);
+          try {
+            const resProxy = await runCli(
+              pyodide.toPy(ctx.argv), ctx.cwd, ctx.stdin ?? "", pyodide.toPy(ctx.env ?? {}), currentCols,
+            );
+            const [stdout, stderr, code] = resProxy.toJs();
+            resProxy.destroy();
+            if (code !== 0) throw new Error((stdout || "") + (stderr || `exit ${code}`));
+            return (stdout || "") + (stderr || "");
+          } finally {
+            if (stateView) Atomics.store(stateView, 0, 0);
+            if (interruptView) Atomics.store(interruptView, 0, 0);
+          }
+        }
+
+        async function curlBuiltin(ctx) {
+          let method = "GET";
+          const headers = {};
+          let body = undefined;
+          let outFile = null;
+          let includeHeaders = false;
+          let proxy = ctx.env?.CORS_PROXY || defaultCorsProxy;
+          let url = null;
+
+          for (let i = 0; i < ctx.argv.length; i++) {
+            const a = ctx.argv[i];
+            if ((a === "-X" || a === "--request") && ctx.argv[i + 1]) { method = ctx.argv[++i]; }
+            else if ((a === "-H" || a === "--header") && ctx.argv[i + 1]) {
+              const raw = ctx.argv[++i];
+              const idx = raw.indexOf(":");
+              if (idx > 0) headers[raw.slice(0, idx).trim()] = raw.slice(idx + 1).trim();
+            } else if ((a === "-d" || a === "--data") && ctx.argv[i + 1]) {
+              body = ctx.argv[++i];
+              if (method === "GET") method = "POST";
+            } else if ((a === "-o" || a === "--output") && ctx.argv[i + 1]) {
+              outFile = ctx.argv[++i];
+            } else if (a === "--proxy" && ctx.argv[i + 1]) {
+              proxy = ctx.argv[++i];
+            } else if (a === "-i" || a === "--include") {
+              includeHeaders = true;
+            } else if (a === "-s" || a === "-S" || a === "-L" || a === "-sS" || a === "-sL") {
+              /* accepted */
+            } else if (a === "-h" || a === "--help") {
+              return "usage: curl [-s] [-i] [-X METHOD] [-H 'K: V'] [-d BODY] [-o FILE] [--proxy PREFIX] <url>\n";
+            } else if (!a.startsWith("-")) {
+              url = a;
+            }
+          }
+          if (!url) throw new Error("usage: curl [-X METHOD] [-H 'K: V'] [-d BODY] [-o FILE] [--proxy PREFIX] <url>");
+
+          const res = await fetch(applyProxy(url, proxy), { method, headers, body });
+          const bytes = new Uint8Array(await res.arrayBuffer());
+          if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+
+          if (outFile) {
+            const dest = resolvePath(ctx.cwd, outFile);
+            wrap(() => pyodide.FS.writeFile(dest, bytes), outFile);
+            return `Saved ${bytes.length} bytes to ${dest}\n`;
+          }
+          const text = decoder.decode(bytes);
+          if (!includeHeaders) return text;
+          const hdrLines = [`HTTP ${res.status} ${res.statusText}`];
+          res.headers.forEach((v, k) => hdrLines.push(`${k}: ${v}`));
+          return `${hdrLines.join("\n")}\n\n${text}`;
+        }
+
+        function bytesToBase64(u8) {
+          let bin = "";
+          for (let i = 0; i < u8.length; i++) bin += String.fromCharCode(u8[i]);
+          return btoa(bin);
+        }
+
+        customBuiltins = {
+          python3: pythonBuiltin,
+          python: pythonBuiltin,
+          git: gitBuiltin,
+          curl: curlBuiltin,
+          "fetch-url": curlBuiltin,
+
+          scrape: async (ctx) => {
+            if (interruptView) Atomics.store(interruptView, 0, 0);
+            if (stateView) Atomics.store(stateView, 0, 1);
+            try {
+              const resProxy = await scrapeCli(
+                pyodide.toPy(ctx.argv), ctx.cwd, ctx.stdin ?? "", pyodide.toPy(ctx.env ?? {}),
+              );
+              const [stdout, stderr, code] = resProxy.toJs();
+              resProxy.destroy();
+              if (code !== 0) throw new Error(stderr || `scrape exited with ${code}`);
+              return stdout;
+            } finally {
+              if (stateView) Atomics.store(stateView, 0, 0);
+              if (interruptView) Atomics.store(interruptView, 0, 0);
+            }
+          },
+
+          crawl: async (ctx) => {
+            if (interruptView) Atomics.store(interruptView, 0, 0);
+            if (stateView) Atomics.store(stateView, 0, 1);
+            try {
+              const resProxy = await crawlCli(
+                pyodide.toPy(ctx.argv), ctx.cwd, pyodide.toPy(ctx.env ?? {}),
+              );
+              const [stdout, stderr, code] = resProxy.toJs();
+              resProxy.destroy();
+              if (code !== 0) throw new Error(stderr || `crawl exited with ${code}`);
+              return stdout;
+            } finally {
+              if (stateView) Atomics.store(stateView, 0, 0);
+              if (interruptView) Atomics.store(interruptView, 0, 0);
+            }
+          },
+
+          duckdb: async (ctx) => {
+            let format = "table", preview = false;
+            const sqlParts = [];
+            for (const arg of ctx.argv) {
+              if (arg === "--json" || arg === "-j") format = "json";
+              else if (arg === "--csv" || arg === "-c") format = "csv";
+              else if (arg === "--preview" || arg === "-p") preview = true;
+              else if (arg === "-h" || arg === "--help") {
+                return "usage: duckdb [--json|--csv|--preview] '<SQL>' (or pipe SQL via stdin)\n";
+              } else sqlParts.push(arg);
+            }
+            const sql = sqlParts.length ? sqlParts.join(" ") : (ctx.stdin || "");
+            if (!sql.trim()) throw new Error("usage: duckdb [--json|--csv|--preview] '<SQL>'");
+            const res = await runDuckDbQuery(sql, ctx.cwd, format, preview);
+            return res.text;
+          },
+
+          pip: async (ctx) => {
+            if (ctx.argv[0] !== "install" || ctx.argv.length < 2) {
+              throw new Error("usage: pip install <package> [...]");
+            }
+            const pkgs = ctx.argv.slice(1);
+            const micropip = pyodide.pyimport("micropip");
+            try { await micropip.install(pyodide.toPy(pkgs)); }
+            finally { micropip.destroy(); }
+            return `Installed: ${pkgs.join(", ")}\n`;
+          },
+
+          sqlite3: (ctx) => {
+            const [db, ...rest] = ctx.argv;
+            const sql = rest.length ? rest.join(" ") : (ctx.stdin || "");
+            if (!db || !sql.trim()) throw new Error("usage: sqlite3 <db_path> '<SQL>'");
+            return runSqlite(db, sql, ctx.cwd);
+          },
+
+          zip: (ctx) => {
+            const [outName, ...targets] = ctx.argv;
+            if (!outName || !targets.length) throw new Error("usage: zip <out.zip> <file|dir> [...]");
+            const entries = {};
+            for (const t of targets) {
+              const full = resolvePath(ctx.cwd, t);
+              const st = wrap(() => pyodide.FS.lstat(full), t);
+              if (pyodide.FS.isDir(st.mode)) collectFilesForZip(full, t.replace(/\/+$/, ""), entries);
+              else entries[t.replace(/^\.\//, "")] = wrap(() => pyodide.FS.readFile(full), t);
+            }
+            const zipped = fflate.zipSync(entries, { level: 6 });
+            const outPath = resolvePath(ctx.cwd, outName);
+            wrap(() => pyodide.FS.writeFile(outPath, zipped), outName);
+            return `Created ${outPath} (${Object.keys(entries).length} files, ${zipped.length} bytes)\n`;
+          },
+
+          unzip: (ctx) => {
+            const listOnly = ctx.argv[0] === "-l";
+            const fileArg = listOnly ? ctx.argv[1] : ctx.argv[0];
+            if (!fileArg) throw new Error("usage: unzip [-l] <archive.zip> [dest]");
+            const full = resolvePath(ctx.cwd, fileArg);
+            const raw = wrap(() => pyodide.FS.readFile(full), fileArg);
+            if (listOnly) {
+              const entries = fflate.unzipSync(raw);
+              return Object.entries(entries).map(([k, v]) => `${String(v.length).padStart(9)}  ${k}`).join("\n") + "\n";
+            }
+            const dest = resolvePath(ctx.cwd, ctx.argv[1] || ".");
+            return `Extracted ${safeUnzipBytes(raw, dest)} file(s) into ${dest}\n`;
+          },
+
+          gzip: (ctx) => {
+            const target = ctx.argv[0];
+            if (!target) throw new Error("usage: gzip <file>");
+            const full = resolvePath(ctx.cwd, target);
+            const gz = fflate.gzipSync(wrap(() => pyodide.FS.readFile(full), target));
+            wrap(() => pyodide.FS.writeFile(`${full}.gz`, gz), `${target}.gz`);
+            return `Wrote ${full}.gz (${gz.length} bytes)\n`;
+          },
+
+          gunzip: (ctx) => {
+            const target = ctx.argv[0];
+            if (!target) throw new Error("usage: gunzip <file.gz>");
+            const full = resolvePath(ctx.cwd, target);
+            const raw = fflate.gunzipSync(wrap(() => pyodide.FS.readFile(full), target));
+            const out = full.endsWith(".gz") ? full.slice(0, -3) : `${full}.out`;
+            wrap(() => pyodide.FS.writeFile(out, raw), out);
+            return `Wrote ${out} (${raw.length} bytes)\n`;
+          },
+
+          imgcat: (ctx) => {
+            const target = ctx.argv[0];
+            if (!target) throw new Error("usage: imgcat <image.png|jpg|gif|webp>");
+            const full = resolvePath(ctx.cwd, target);
+            const bytes = wrap(() => pyodide.FS.readFile(full), target);
+            return `\x1b]1337;File=inline=1;size=${bytes.length}:${bytesToBase64(bytes)}\x07\n`;
+          },
+
+          preview: async (ctx) => {
+            const target = ctx.argv[0];
+            if (!target) throw new Error("usage: preview <path>");
+            const full = resolvePath(ctx.cwd, target);
+            const bytes = wrap(() => pyodide.FS.readFile(full), target);
+            await callHost("preview-file", { path: full, bytes });
+            return `Opened ${full} in preview pane.\n`;
+          },
+
+          download: async (ctx) => {
+            const target = ctx.argv[0];
+            if (!target) throw new Error("usage: download <path>");
+            const full = resolvePath(ctx.cwd, target);
+            const bytes = wrap(() => pyodide.FS.readFile(full), target);
+            await callHost("download", { name: full.split("/").pop() || "download.bin", bytes });
+            return `Downloaded ${full} (${bytes.length} bytes).\n`;
+          },
+
+          pbcopy: async (ctx) => { await callHost("pbcopy", { text: ctx.stdin ?? "" }); return ""; },
+          pbpaste: async () => await callHost("pbpaste"),
+        };
+
+        emitTree();
+        sendStatus("Ready (Py 3.14)", "ready");
+        self.postMessage({ type: "ready" });
+        const sabNote = interruptView
+          ? "\x1b[32mCOI + SharedArrayBuffer active\x1b[0m (Python Ctrl+C SIGINT + DuckDB pthreads enabled)."
+          : "\x1b[33mCOI inactive\x1b[0m (place coi-serviceworker.min.js in ./ over http://localhost and reload for SAB + pthreads).";
+        await createSession(
+          firstTabId, rows, cols,
+          `${sabNote}\r\nTry \x1b[1mscrape --help\x1b[0m, \x1b[1mduckdb --help\x1b[0m, or pick a \x1b[1mRecipe\x1b[0m.\r\n\r\n`,
+        );
+      } catch (err) {
+        sendStatus("Boot failed", "error");
+        sendTermLog(firstTabId, `\r\n\x1b[31mBoot failed:\x1b[0m ${err?.message || err}\r\n`);
+      }
+    }
+
+    self.onmessage = async (e) => {
+      const msg = e.data;
+      if (msg.type === "host-rpc-result") {
+        const p = pendingHostRpcs.get(msg.id);
+        if (p) {
+          pendingHostRpcs.delete(msg.id);
+          msg.ok ? p.resolve(msg.value) : p.reject(new Error(msg.error));
+        }
+        return;
+      }
+
+      if (msg.type === "boot") {
+        await boot(msg.tabId, msg.rows, msg.cols, msg.shareZipBytes || null, msg.corsProxy || "", msg.controlSab || null);
+        return;
+      }
+      if (!pyodide) return;
+
+      try {
+        switch (msg.type) {
+          case "set-proxy":
+            defaultCorsProxy = msg.proxy || "";
+            pyodide.globals.get("_set_default_proxy")(defaultCorsProxy);
+            break;
+          case "create-tab":
+            await createSession(msg.tabId, msg.rows, msg.cols);
+            break;
+          case "close-tab":
+            sessions.delete(msg.tabId);
+            break;
+          case "input": {
+            const s = sessions.get(msg.tabId);
+            if (s) { s.term.send(msg.data); pump(msg.tabId); }
+            break;
+          }
+          case "resize":
+            currentCols = msg.cols || currentCols;
+            for (const s of sessions.values()) s.term.resize(msg.rows, msg.cols);
+            break;
+          case "cancel": {
+            const s = sessions.get(msg.tabId);
+            s?.term.cancel();
+            pyBash?.cancel();
+            setTimeout(() => { s?.term.clearCancel(); pyBash?.clearCancel(); }, 50);
+            break;
+          }
+          case "upload": {
+            const extractTar = pyodide.globals.get("_safe_extract_tar");
+            for (const f of msg.files) {
+              const u8 = new Uint8Array(f.bytes);
+              if (f.extract && f.name.toLowerCase().endsWith(".zip")) safeUnzipBytes(u8, "/work");
+              else if (f.extract) extractTar(u8, "/work");
+              else pyodide.FS.writeFile(`/work/${f.name}`, u8);
+            }
+            await syncIdbfs(false);
+            emitTree();
+            break;
+          }
+          case "list-tree":
+            emitTree();
+            break;
+          case "read-file":
+            self.postMessage({ type: "rpc-reply", id: msg.id, ok: true, value: pyodide.FS.readFile(msg.path) });
+            break;
+          case "write-file":
+            pyodide.FS.writeFile(msg.path, new Uint8Array(msg.bytes));
+            await syncIdbfs(false);
+            emitTree();
+            self.postMessage({ type: "rpc-reply", id: msg.id, ok: true });
+            break;
+          case "delete-file":
+            pyodide.FS.unlink(msg.path);
+            await syncIdbfs(false);
+            emitTree();
+            self.postMessage({ type: "rpc-reply", id: msg.id, ok: true });
+            break;
+          case "export-zip": {
+            const entries = collectFilesForZip("/work");
+            self.postMessage({ type: "rpc-reply", id: msg.id, ok: true, value: fflate.zipSync(entries, { level: 6 }) });
+            break;
+          }
+          case "mount-native":
+            pyodide.FS.mkdirTree("/work/local");
+            nativeMount = await pyodide.mountNativeFS("/work/local", msg.handle);
+            emitTree();
+            self.postMessage({ type: "rpc-reply", id: msg.id, ok: true });
+            break;
+          case "sync-native":
+            if (nativeMount) await nativeMount.syncfs();
+            self.postMessage({ type: "rpc-reply", id: msg.id, ok: true });
+            break;
+          case "reset-workspace":
+            seedStarterFiles();
+            await syncIdbfs(false);
+            emitTree();
+            break;
+        }
+      } catch (err) {
+        if (msg.id) {
+          self.postMessage({ type: "rpc-reply", id: msg.id, ok: false, error: err?.message || String(err) });
+        } else if (msg.tabId) {
+          sendTermLog(msg.tabId, `\r\n\x1b[31m[worker error]\x1b[0m ${err?.message || err}\r\n`);
+        }
+      }
+    };
+  </script>
+
+  <!-- Main Thread UI -->
+  <script type="module">
+    import { Terminal as XTerm } from "@xterm/xterm";
+    import { FitAddon } from "@xterm/addon-fit";
+    import { SearchAddon } from "@xterm/addon-search";
+    import { WebLinksAddon } from "@xterm/addon-web-links";
+    import { WebglAddon } from "@xterm/addon-webgl";
+    import { Unicode11Addon } from "@xterm/addon-unicode11";
+    import { ImageAddon } from "@xterm/addon-image";
+    import { ClipboardAddon } from "@xterm/addon-clipboard";
+    import { SerializeAddon } from "@xterm/addon-serialize";
+    import { ProgressAddon } from "@xterm/addon-progress";
+
+    import * as duckdb from "@duckdb/duckdb-wasm";
+
+    import { EditorState } from "@codemirror/state";
+    import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection } from "@codemirror/view";
+    import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+    import { bracketMatching, indentOnInput, syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
+    import { python } from "@codemirror/lang-python";
+    import { javascript } from "@codemirror/lang-javascript";
+    import { sql } from "@codemirror/lang-sql";
+    import { json } from "@codemirror/lang-json";
+    import { markdown } from "@codemirror/lang-markdown";
+    import { oneDark } from "@codemirror/theme-one-dark";
+
+    const $ = (id) => document.getElementById(id);
+    const layout = $("layout");
+    const statusDot = $("status-dot");
+    const statusText = $("status-text");
+    const coiBadge = $("coi-badge");
+    const persistBadge = $("persist-badge");
+    const rendererBadge = $("renderer-badge");
+    const oscBar = $("osc-progress-bar");
+    const fileTreeEl = $("file-tree");
+    const tabBar = $("tab-bar");
+    const btnNewTab = $("btn-new-tab");
+    const btnProxy = $("btn-proxy");
+    const termStage = $("term-stage");
+    const searchBar = $("search-bar");
+    const searchInput = $("search-input");
+    const previewTitle = $("preview-title");
+    const previewBody = $("preview-body");
+    const liveBadge = $("live-badge");
+    const btnEditToggle = $("btn-edit-toggle");
+    const btnSaveFile = $("btn-save-file");
+    const uploadInput = $("upload-input");
+    const recipeSelect = $("recipe-select");
+
+    const decoder = new TextDecoder();
+    const encoder = new TextEncoder();
+
+    const coiActive = Boolean(window.crossOriginIsolated && typeof SharedArrayBuffer !== "undefined");
+    coiBadge.textContent = coiActive ? "COI: ON" : "COI: OFF";
+    if (coiActive) {
+      coiBadge.classList.add("ok");
+      coiBadge.title = "crossOriginIsolated + SharedArrayBuffer active (Python Ctrl+C SIGINT + DuckDB pthreads)";
+    } else {
+      coiBadge.title = "Place coi-serviceworker.min.js in ./ and reload over HTTP/localhost";
+    }
+
+    const controlSab = coiActive ? new SharedArrayBuffer(8) : null;
+    const interruptView = controlSab ? new Int32Array(controlSab, 0, 1) : null;
+    const stateView = controlSab ? new Int32Array(controlSab, 4, 1) : null;
+
+    function interruptPythonIfRunning() {
+      if (interruptView && stateView && Atomics.load(stateView, 0) === 1) {
+        Atomics.store(interruptView, 0, 2);
+        return true;
+      }
+      return false;
+    }
+
+const RECIPES = [
+      ["COI Test: Interrupt infinite Python loop (Ctrl+C / Stop)", `echo "Looping in Python — press Ctrl+C or click Stop (no worker kill)..." && python3 -c 'while True: pass'`],
+      ["Scrape (Offline): HTML table → CSV → DuckDB", `scrape sample.html --tables --csv > products.csv && duckdb --preview "SELECT Category, Model, Price_USD, Score FROM 'products.csv' ORDER BY Score DESC"`],
+      ["Scrape (Offline): XPath query via lxml", `scrape sample.html --xpath '//table[@id="products"]//tbody/tr/td[1]/text()'`],
+      ["Scrape (Offline): OpenGraph + JSON-LD metadata", "scrape sample.html --meta | jq ."],
+      ["Scrape (Offline): Article text + links", "scrape sample.html --article && echo '---' && scrape sample.html --links --preview"],
+      ["Scrape (Live): Wikipedia HTML → headings & links", `curl -s 'https://en.wikipedia.org/w/api.php?action=parse&page=Web_scraping&prop=text&format=json&origin=*' | jq -r '.parse.text["*"]' > wiki.html && scrape wiki.html 'h2,h3' | head -n 15`],
+      ["Scrape (Live Async): Top 10 HN stories → DuckDB", `python3 -c 'import json, scraper, workbench; ids = (await scraper.fetch("https://hacker-news.firebaseio.com/v0/topstories.json")).json()[:10]; res = await scraper.fetch_many([f"https://hacker-news.firebaseio.com/v0/item/{i}.json" for i in ids], concurrency=5, delay=0); items = [r.json() for r in res if r.status == 200]; open("hn.jsonl","w").write("\\n".join(json.dumps({"score":x.get("score",0),"by":x.get("by",""),"title":x.get("title",""),"url":x.get("url","")}) for x in items)+"\\n"); print(f"Saved {len(items)} stories to hn.jsonl")' && duckdb --preview "SELECT score, by, title, url FROM 'hn.jsonl' ORDER BY score DESC"`],
+      ["Scrape (Live): httpbin.org/html + Rich Panel", `python3 -c 'import scraper; from rich.console import Console; from rich.panel import Panel; page = await scraper.fetch("https://httpbin.org/html"); Console().print(Panel(page.article()[:420] + "...", title="httpbin.org/html", border_style="green"))'`],
+      ["DuckDB: CSV → Parquet + Preview", `duckdb "COPY (SELECT region, SUM(revenue) AS total FROM 'sales.csv' GROUP BY region ORDER BY total DESC) TO 'summary.parquet' (FORMAT PARQUET)" && duckdb --preview "SELECT * FROM 'summary.parquet'"`],
+      ["Rich: 24-bit ANSI Table + analyze.py + SVG", "python3 analyze.py && preview chart.svg"],
+      ["Git: init + commit + log (isomorphic-git)", "git init && git add . && git commit -m 'Initial commit' && git log"],
+      ["Zip: create + list archive (fflate)", "zip bundle.zip analyze.py sales.csv sample.html README.md && unzip -l bundle.zip"],
+      ["Progress bar 75% (OSC 9;4)", `printf '\\033]9;4;1;75\\007Progress set to 75%%\\n'`],
+      ["Clear progress bar (OSC 9;4)", `printf '\\033]9;4;0\\007Progress cleared\\n'`],
+      ["DuckDB: Sales pivot Q1 vs Q2 → Preview", `duckdb --preview "SELECT region, SUM(CASE WHEN quarter='Q1' THEN revenue ELSE 0 END) AS Q1, SUM(CASE WHEN quarter='Q2' THEN revenue ELSE 0 END) AS Q2, SUM(revenue) AS total FROM 'sales.csv' GROUP BY region ORDER BY total DESC"`],
+      ["Scrape + DuckDB: Query JSON metadata via SQL", `scrape sample.html --meta > meta.json && duckdb --preview "SELECT title, canonical, og.title AS og_title, og.type AS og_type FROM 'meta.json'"`],
+      ["Scrape (Offline): Parse RSS XML feed → Preview", `printf '<rss version="2.0"><channel><item><title>Bashkit WASM</title><link>https://example.org/bashkit</link><pubDate>2026-11-01</pubDate><description>Sandboxed shell in the browser</description></item><item><title>Pyodide 3.14</title><link>https://example.org/pyodide</link><pubDate>2026-11-15</pubDate><description>CPython WebAssembly runtime</description></item></channel></rss>' | scrape - --rss --preview`],
+      ["Crawl (Live): httpbin.org links → JSONL + Preview", `crawl https://httpbin.org/links/5/0 --max-pages 5 --depth 1 --no-robots -o crawl.jsonl --preview`],
+      ["Python + Workbench: Render HTML report in Preview", `python3 -c 'import workbench; q = f"SELECT region, SUM(revenue) AS total FROM {chr(39)}sales.csv{chr(39)} GROUP BY region ORDER BY total DESC"; res = (await workbench.duckdb(q)).to_py(); rows = "".join(f"<tr><td>{r[0]}</td><td align=right>{r[1]:,}</td></tr>" for r in res["rows"]); await workbench.show_html(f"<body style=font-family:system-ui;padding:16px><h2>Regional Revenue</h2><table border=1 cellspacing=0 cellpadding=8><tr><th>Region</th><th>Total</th></tr>{rows}</table></body>", "Revenue Report")'`],
+      ["SQLite: Create table + query CLI", `sqlite3 notes.db "CREATE TABLE IF NOT EXISTS notes(id INTEGER PRIMARY KEY, tag TEXT, body TEXT); DELETE FROM notes; INSERT INTO notes(tag, body) VALUES ('cli','Bashkit WASM'), ('sql','SQLite3 builtin'); SELECT id, tag, body FROM notes;"`],
+      ["Terminal Image (imgcat): Generate PNG + render inline", `python3 -c 'import struct, zlib; ck = lambda t, d: struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d)); w = h = 64; raw = b"".join(b"\\x00" + b"".join(bytes([x*4, y*4, 210]) for x in range(w)) for y in range(h)); png = b"\\x89PNG\\r\\n\\x1a\\n" + ck(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + ck(b"IDAT", zlib.compress(raw)) + ck(b"IEND", b""); open("gradient.png", "wb").write(png); print("Wrote gradient.png")' && imgcat gradient.png && preview gradient.png`],
+      ["Git: branch + edit + diff (isomorphic-git)", `rm -rf demo_repo && mkdir -p demo_repo && cd demo_repo && git init && echo "v1" > app.txt && git add app.txt && git commit -m "Initial v1" && git branch dev && git checkout dev && printf "v1\\nv2\\n" > app.txt && git diff && cd /work`],
+      ["Gzip: compress + verify + decompress (fflate)", `gzip sample.html && wc -c sample.html sample.html.gz && gunzip sample.html.gz`],
+    ];
+
+    for (const [label, cmd] of RECIPES) {
+      const opt = document.createElement("option");
+      opt.textContent = label;
+      opt.value = cmd;
+      recipeSelect.appendChild(opt);
+    }
+
+    let corsProxy = localStorage.getItem("workbench_cors_proxy") || "";
+    function updateProxyUi() {
+      btnProxy.textContent = corsProxy ? "Proxy: on" : "Proxy: off";
+      btnProxy.classList.toggle("active-pill", Boolean(corsProxy));
+      btnProxy.title = corsProxy ? `Active CORS proxy: ${corsProxy}` : "Configure optional CORS proxy prefix";
+    }
+    updateProxyUi();
+
+    let duckPromise = null;
+
+    async function getDuckDb() {
+      if (!duckPromise) {
+        duckPromise = (async () => {
+          setStatus("Loading DuckDB-WASM…");
+          const bundles = duckdb.getJsDelivrBundles();
+          const bundle = await duckdb.selectBundle(bundles);
+
+          const mainWorkerUrl = URL.createObjectURL(
+            new Blob([`importScripts("${bundle.mainWorker}");`], { type: "text/javascript" }),
+          );
+          const pthreadWorkerUrl = bundle.pthreadWorker
+            ? URL.createObjectURL(
+                new Blob([`importScripts("${bundle.pthreadWorker}");`], { type: "text/javascript" }),
+              )
+            : null;
+
+          const duckWorker = new Worker(mainWorkerUrl);
+          const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING);
+          const db = new duckdb.AsyncDuckDB(logger, duckWorker);
+          await db.instantiate(bundle.mainModule, pthreadWorkerUrl);
+          URL.revokeObjectURL(mainWorkerUrl);
+          const conn = await db.connect();
+
+          const mode = bundle.pthreadWorker ? "DuckDB COI" : "DuckDB";
+          setStatus(`Ready (Py 3.14 + ${mode})`, "ready");
+          return { db, conn };
+        })().catch((err) => {
+          duckPromise = null;
+          throw err;
+        });
+      }
+      return duckPromise;
+    }
+
+    function normalizeDuckVal(v) {
+      if (v === null || v === undefined) return null;
+      if (typeof v === "bigint") return Number.isSafeInteger(Number(v)) ? Number(v) : v.toString();
+      if (v instanceof Date) return v.toISOString();
+      if (typeof v === "object") return JSON.stringify(v, (_, x) => (typeof x === "bigint" ? x.toString() : x));
+      return v;
+    }
+
+    function formatAsciiTable(cols, rows) {
+      if (!cols.length) return "";
+      const strRows = rows.map((r) => r.map((v) => (v === null ? "NULL" : String(v))));
+      const widths = cols.map((c, i) => Math.max(c.length, ...strRows.map((r) => r[i].length)));
+      const sep = "+-" + widths.map((w) => "-".repeat(w)).join("-+-") + "-+";
+      const fmtRow = (vals) => "| " + vals.map((v, i) => v.padEnd(widths[i])).join(" | ") + " |";
+      return [sep, fmtRow(cols), sep, ...strRows.map(fmtRow), sep].join("\n") + "\n";
+    }
+
+    function formatCsvOutput(cols, rows) {
+      const esc = (v) => {
+        const s = v === null ? "" : String(v);
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      return [cols.map(esc).join(","), ...rows.map((r) => r.map(esc).join(","))].join("\n") + "\n";
+    }
+
+    async function executeDuckDbHost({ sql: query, files = [], format = "table", preview = false }) {
+      const { db, conn } = await getDuckDb();
+
+      for (const f of files) {
+        const u8 = new Uint8Array(f.bytes);
+        await db.dropFile(f.rel).catch(() => {});
+        await db.registerFileBuffer(f.rel, new Uint8Array(u8));
+        if (f.full && f.full !== f.rel) {
+          await db.dropFile(f.full).catch(() => {});
+          await db.registerFileBuffer(f.full, new Uint8Array(u8));
+        }
+      }
+
+      const table = await conn.query(query);
+      const columns = table.schema.fields.map((f) => f.name);
+      const records = table.toArray().map((row) => {
+        const raw = row.toJSON();
+        const obj = {};
+        for (const c of columns) obj[c] = normalizeDuckVal(raw[c]);
+        return obj;
+      });
+      const rows = records.map((rec) => columns.map((c) => rec[c]));
+
+      const writtenFiles = [];
+      const copyRe = /COPY\s+[\s\S]+?\s+TO\s+'([^']+)'/gi;
+      let m;
+      while ((m = copyRe.exec(query)) !== null) {
+        const outName = m[1];
+        try {
+          const outBytes = await db.copyFileToBuffer(outName);
+          writtenFiles.push({ name: outName, bytes: outBytes });
+        } catch (e) {
+          console.warn("DuckDB copyFileToBuffer skipped:", outName, e);
+        }
+      }
+
+      if (preview && columns.length) {
+        currentPreview = {
+          kind: "virtual",
+          vkind: "table",
+          title: `DuckDB (${rows.length} rows)`,
+          headers: columns,
+          rows: rows.map((r) => r.map((v) => (v === null ? "NULL" : String(v)))),
+        };
+        renderPreview();
+      }
+
+      let text = "";
+      if (format === "json") text = JSON.stringify(records, null, 2) + "\n";
+      else if (format === "csv") text = formatCsvOutput(columns, rows);
+      else text = formatAsciiTable(columns, rows);
+
+      if (writtenFiles.length && !rows.length) {
+        text = writtenFiles.map((w) => `Wrote ${w.name} (${w.bytes.length} bytes)`).join("\n") + "\n";
+      }
+
+      return { columns, rows, records, text, writtenFiles };
+    }
+
+    let nextTabId = 1;
+    let activeTabId = null;
+    const tabs = new Map();
+
+    let worker = null;
+    let workerUrl = null;
+    let nextRpcId = 1;
+    const pendingRpcs = new Map();
+
+    let currentPreview = null;
+    let currentBlobUrl = null;
+    let cmView = null;
+
+    function setStatus(text, state = "") {
+      statusText.textContent = text;
+      statusDot.className = "dot" + (state ? ` ${state}` : "");
+    }
+
+    function updateOscProgress(state, value) {
+      oscBar.className = "";
+      if (state === 0) oscBar.style.width = "0%";
+      else if (state === 3) oscBar.classList.add("indeterminate");
+      else {
+        oscBar.style.width = `${Math.max(0, Math.min(100, value || 0))}%`;
+        if (state === 2) oscBar.classList.add("error");
+        if (state === 4) oscBar.classList.add("paused");
+      }
+    }
+
+    function setControlsEnabled(enabled) {
+      for (const id of [
+        "btn-proxy", "btn-upload", "btn-export-zip", "btn-share", "btn-search", "btn-save-log",
+        "btn-stop", "btn-kill", "btn-reset", "btn-preview", "btn-new-tab", "recipe-select",
+      ]) {
+        $(id).disabled = !enabled;
+      }
+      if ("showDirectoryPicker" in window) $("btn-mount").disabled = !enabled;
+    }
+
+    function callWorker(type, payload = {}) {
+      return new Promise((resolve, reject) => {
+        const id = nextRpcId++;
+        pendingRpcs.set(id, { resolve, reject });
+        worker.postMessage({ type, id, ...payload });
+      });
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => (
+        { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+      ));
+    }
+
+    function toBase64Url(bytes) {
+      let bin = "";
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    }
+
+    function fromBase64Url(str) {
+      const pad = "=".repeat((4 - (str.length % 4)) % 4);
+      const bin = atob(str.replace(/-/g, "+").replace(/_/g, "/") + pad);
+      const out = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out;
+    }
+
+    function triggerDownload(filename, bytes) {
+      const url = URL.createObjectURL(new Blob([bytes]));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function createUiTab(notifyWorker = true) {
+      const id = nextTabId++;
+      const slotEl = document.createElement("div");
+      slotEl.className = "term-slot";
+      termStage.appendChild(slotEl);
+
+      const xterm = new XTerm({
+        allowProposedApi: true,
+        cursorBlink: true,
+        fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+        fontSize: 13.5,
+        theme: {
+          background: "#0b0d12",
+          foreground: "#e6eaf2",
+          cursor: "#6ea8fe",
+          selectionBackground: "#2a3a5e",
+        },
+      });
+
+      const fit = new FitAddon();
+      const search = new SearchAddon();
+      const serialize = new SerializeAddon();
+      xterm.loadAddon(fit);
+      xterm.loadAddon(search);
+      xterm.loadAddon(serialize);
+      xterm.loadAddon(new WebLinksAddon());
+
+      try { xterm.loadAddon(new ClipboardAddon()); } catch {}
+      try { xterm.loadAddon(new Unicode11Addon()); xterm.unicode.activeVersion = "11"; } catch {}
+      try { xterm.loadAddon(new ImageAddon()); } catch {}
+      try {
+        const progress = new ProgressAddon();
+        xterm.loadAddon(progress);
+        progress.onChange?.((p) => updateOscProgress(p.state, p.value));
+      } catch {}
+
+      xterm.open(slotEl);
+
+      let webgl = null;
+      try {
+        webgl = new WebglAddon();
+        webgl.onContextLoss(() => { webgl?.dispose(); webgl = null; rendererBadge.textContent = "GL: DOM"; });
+        xterm.loadAddon(webgl);
+        rendererBadge.textContent = "GL: WebGL";
+      } catch {
+        rendererBadge.textContent = "GL: DOM";
+      }
+
+      xterm.onData((data) => {
+        if (data === "\x03" && interruptPythonIfRunning()) {
+          xterm.write("^C\r\n");
+          return;
+        }
+        worker?.postMessage({ type: "input", tabId: id, data });
+      });
+
+      const tabEl = document.createElement("div");
+      tabEl.className = "tab";
+      tabEl.innerHTML = `<span>sh ${id}</span><span class="close" title="Close tab">×</span>`;
+      tabEl.addEventListener("click", (e) => {
+        e.target.closest(".close") ? closeUiTab(id) : selectTab(id);
+      });
+      tabBar.insertBefore(tabEl, btnNewTab);
+
+      tabs.set(id, { id, xterm, fit, search, serialize, slotEl, tabEl });
+      selectTab(id);
+
+      if (notifyWorker && worker) {
+        worker.postMessage({ type: "create-tab", tabId: id, rows: xterm.rows, cols: xterm.cols });
+      }
+      return id;
+    }
+
+    function selectTab(id) {
+      activeTabId = id;
+      for (const t of tabs.values()) {
+        const act = t.id === id;
+        t.slotEl.classList.toggle("active", act);
+        t.tabEl.classList.toggle("active", act);
+      }
+      const cur = tabs.get(id);
+      if (cur) {
+        cur.fit.fit();
+        cur.xterm.focus();
+        worker?.postMessage({ type: "resize", rows: cur.xterm.rows, cols: cur.xterm.cols });
+      }
+    }
+
+    function closeUiTab(id) {
+      if (tabs.size <= 1) return;
+      const t = tabs.get(id);
+      if (!t) return;
+      worker?.postMessage({ type: "close-tab", tabId: id });
+      t.xterm.dispose();
+      t.slotEl.remove();
+      t.tabEl.remove();
+      tabs.delete(id);
+      if (activeTabId === id) selectTab(tabs.keys().next().value);
+    }
+
+    function fitActiveTerminal() {
+      const cur = tabs.get(activeTabId);
+      if (!cur) return;
+      cur.fit.fit();
+      worker?.postMessage({ type: "resize", rows: cur.xterm.rows, cols: cur.xterm.cols });
+    }
+
+    function languageForPath(path) {
+      const ext = path.split(".").pop().toLowerCase();
+      switch (ext) {
+        case "py": return python();
+        case "js": case "mjs": case "cjs": return javascript();
+        case "ts": case "tsx": return javascript({ typescript: true, jsx: ext === "tsx" });
+        case "jsx": return javascript({ jsx: true });
+        case "sql": return sql();
+        case "json": case "jsonl": return json();
+        case "md": case "markdown": return markdown();
+        default: return [];
+      }
+    }
+
+    function destroyCm() {
+      if (cmView) { cmView.destroy(); cmView = null; }
+      previewBody.classList.remove("cm-mode");
+    }
+
+    function isLikelyText(path, bytes) {
+      const ext = path.split(".").pop().toLowerCase();
+      if (["png", "jpg", "jpeg", "gif", "webp", "pdf", "db", "sqlite", "gz", "zip", "wasm", "parquet"].includes(ext)) {
+        return false;
+      }
+      return !bytes.subarray(0, Math.min(bytes.length, 512)).includes(0);
+    }
+
+    function renderTableHtml(headers, rows) {
+      const thead = headers
+        ? `<thead><tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr></thead>`
+        : "";
+      const tbody = `<tbody>${rows.slice(0, 300)
+        .map((r) => `<tr>${r.map((c) => `<td>${escapeHtml(c)}</td>`).join("")}</tr>`)
+        .join("")}</tbody>`;
+      return `<table class="grid">${thead}${tbody}</table>`;
+    }
+
+    function renderPreview() {
+      if (!currentPreview) return;
+      destroyCm();
+      if (currentBlobUrl) { URL.revokeObjectURL(currentBlobUrl); currentBlobUrl = null; }
+      layout.classList.add("preview-open");
+
+      if (currentPreview.kind === "virtual") {
+        previewTitle.textContent = currentPreview.title;
+        liveBadge.hidden = true;
+        btnEditToggle.hidden = true;
+        btnSaveFile.hidden = true;
+        if (currentPreview.vkind === "html") {
+          const iframe = document.createElement("iframe");
+          iframe.sandbox = "allow-scripts";
+          iframe.srcdoc = currentPreview.data;
+          previewBody.replaceChildren(iframe);
+        } else if (currentPreview.vkind === "svg") {
+          currentBlobUrl = URL.createObjectURL(new Blob([currentPreview.data], { type: "image/svg+xml" }));
+          previewBody.innerHTML = `<img src="${currentBlobUrl}" alt="${escapeHtml(currentPreview.title)}" />`;
+        } else if (currentPreview.vkind === "table") {
+          previewBody.innerHTML = renderTableHtml(currentPreview.headers, currentPreview.rows);
+        }
+        setTimeout(fitActiveTerminal, 40);
+        return;
+      }
+
+      const { path, bytes, isText, editing } = currentPreview;
+      const ext = path.split(".").pop().toLowerCase();
+      previewTitle.textContent = path;
+      liveBadge.hidden = editing;
+      btnEditToggle.hidden = !isText;
+      btnEditToggle.textContent = editing ? "Preview" : "Edit";
+      btnSaveFile.hidden = !editing;
+
+      if (editing && isText) {
+        previewBody.replaceChildren();
+        previewBody.classList.add("cm-mode");
+        const state = EditorState.create({
+          doc: decoder.decode(bytes),
+          extensions: [
+            lineNumbers(),
+            highlightActiveLineGutter(),
+            highlightActiveLine(),
+            drawSelection(),
+            history(),
+            indentOnInput(),
+            bracketMatching(),
+            syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+            oneDark,
+            languageForPath(path),
+            keymap.of([
+              { key: "Mod-s", run: () => { saveCurrentEdit(); return true; } },
+              indentWithTab,
+              ...defaultKeymap,
+              ...historyKeymap,
+            ]),
+          ],
+        });
+        cmView = new EditorView({ state, parent: previewBody });
+        cmView.focus();
+      } else if (["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext)) {
+        const mime = ext === "svg" ? "image/svg+xml" : `image/${ext === "jpg" ? "jpeg" : ext}`;
+        currentBlobUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
+        previewBody.innerHTML = `<img src="${currentBlobUrl}" alt="${escapeHtml(path)}" />`;
+      } else if (ext === "html" || ext === "htm") {
+        const iframe = document.createElement("iframe");
+        iframe.sandbox = "allow-scripts";
+        iframe.srcdoc = decoder.decode(bytes);
+        previewBody.replaceChildren(iframe);
+      } else if (ext === "csv") {
+        const rows = decoder.decode(bytes).trim().split(/\r?\n/).map((l) => l.split(","));
+        previewBody.innerHTML = renderTableHtml(rows[0], rows.slice(1));
+      } else if (ext === "parquet") {
+        previewBody.innerHTML = `<span style="color:var(--muted)">Querying Parquet via DuckDB-WASM…</span>`;
+        const name = path.split("/").pop();
+        executeDuckDbHost({
+          sql: `SELECT * FROM '${name.replace(/'/g, "''")}' LIMIT 250`,
+          files: [{ rel: name, full: path, bytes }],
+          format: "table",
+          preview: false,
+        }).then((res) => {
+          previewBody.innerHTML = renderTableHtml(
+            res.columns,
+            res.rows.map((r) => r.map((v) => (v === null ? "NULL" : String(v)))),
+          );
+        }).catch((err) => {
+          previewBody.innerHTML = `<pre style="color:var(--err)">${escapeHtml(err.message)}</pre>`;
+        });
+      } else if (isText) {
+        previewBody.innerHTML = `<pre>${escapeHtml(decoder.decode(bytes))}</pre>`;
+      } else {
+        previewBody.innerHTML = `<span style="color:var(--muted)">Binary file (${bytes.length} bytes). Use Download (↓) in the sidebar.</span>`;
+      }
+      setTimeout(fitActiveTerminal, 40);
+    }
+
+    function openPreviewFile(path, bytes, startEditing = false) {
+      const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+      const isText = isLikelyText(path, u8);
+      currentPreview = { kind: "file", path, bytes: u8, isText, editing: isText && startEditing };
+      renderPreview();
+    }
+
+    async function saveCurrentEdit() {
+      if (currentPreview?.kind !== "file" || !currentPreview.editing || !cmView) return;
+      const bytes = encoder.encode(cmView.state.doc.toString());
+      await callWorker("write-file", { path: currentPreview.path, bytes });
+      currentPreview.bytes = bytes;
+      setStatus(`Saved ${currentPreview.path}`, "ready");
+    }
+
+    function formatSize(n) {
+      if (n < 1024) return `${n}B`;
+      if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)}K`;
+      return `${(n / (1024 * 1024)).toFixed(1)}M`;
+    }
+
+    function renderTree(nodes, depth = 0) {
+      const frag = document.createDocumentFragment();
+      for (const item of nodes) {
+        const row = document.createElement("div");
+        row.className = "entry";
+        row.style.paddingLeft = `${6 + depth * 14}px`;
+        row.innerHTML = `
+          <span>${item.isDir ? "📁" : "📄"}</span>
+          <span class="name" title="${escapeHtml(item.full)}">${escapeHtml(item.name)}</span>
+          ${item.isDir ? "" : `<span class="meta">${formatSize(item.size)}</span>`}
+          ${item.isDir ? "" : `<button class="act" data-dl title="Download">↓</button><button class="act del" data-del title="Delete">×</button>`}
+        `;
+        if (!item.isDir) {
+          row.addEventListener("click", async (e) => {
+            if (e.target.closest("[data-dl]")) {
+              triggerDownload(item.name, await callWorker("read-file", { path: item.full }));
+            } else if (e.target.closest("[data-del]")) {
+              await callWorker("delete-file", { path: item.full });
+            } else {
+              const bytes = await callWorker("read-file", { path: item.full });
+              const autoEdit = /\.(py|js|mjs|ts|sql|json|jsonl|md)$/i.test(item.name);
+              openPreviewFile(item.full, bytes, autoEdit);
+            }
+          });
+        }
+        frag.appendChild(row);
+        if (item.isDir && item.children?.length) frag.appendChild(renderTree(item.children, depth + 1));
+      }
+      return frag;
+    }
+
+    function wireSplitter(el, varName, side) {
+      el.addEventListener("pointerdown", (e) => {
+        el.setPointerCapture(e.pointerId);
+        el.classList.add("active");
+        const onMove = (ev) => {
+          const val = side === "left"
+            ? Math.max(150, Math.min(480, ev.clientX))
+            : Math.max(260, Math.min(window.innerWidth - 340, window.innerWidth - ev.clientX));
+          document.documentElement.style.setProperty(varName, `${val}px`);
+          fitActiveTerminal();
+        };
+        const onUp = () => {
+          el.classList.remove("active");
+          el.removeEventListener("pointermove", onMove);
+          el.removeEventListener("pointerup", onUp);
+        };
+        el.addEventListener("pointermove", onMove);
+        el.addEventListener("pointerup", onUp);
+      });
+    }
+    wireSplitter($("split-left"), "--sidebar-w", "left");
+    wireSplitter($("split-right"), "--preview-w", "right");
+
+    let initialShareBytes = null;
+    if (location.hash.startsWith("#zip=")) {
+      try { initialShareBytes = fromBase64Url(location.hash.slice(5)); }
+      catch { initialShareBytes = null; }
+    }
+
+    function spawnWorker(useShareBytes = false) {
+      if (worker) {
+        worker.terminate();
+        for (const { reject } of pendingRpcs.values()) reject(new Error("Worker terminated"));
+        pendingRpcs.clear();
+      }
+      if (interruptView) Atomics.store(interruptView, 0, 0);
+      if (stateView) Atomics.store(stateView, 0, 0);
+
+      for (const t of tabs.values()) { t.xterm.dispose(); t.slotEl.remove(); t.tabEl.remove(); }
+      tabs.clear();
+      nextTabId = 1;
+      const firstId = createUiTab(false);
+      const firstTab = tabs.get(firstId);
+
+      if (!workerUrl) {
+        workerUrl = URL.createObjectURL(
+          new Blob([$("worker-code").textContent], { type: "text/javascript" }),
+        );
+      }
+
+      setControlsEnabled(false);
+      $("btn-kill").disabled = false;
+      $("btn-sync").hidden = true;
+      updateOscProgress(0, 0);
+      setStatus("Booting Worker…");
+
+      worker = new Worker(workerUrl, { type: "module" });
+
+      worker.onmessage = async (e) => {
+        const msg = e.data;
+        switch (msg.type) {
+          case "status": setStatus(msg.text, msg.state); break;
+          case "persist-mode": persistBadge.textContent = `FS: ${msg.mode}`; break;
+          case "ready":
+            setControlsEnabled(true);
+            tabs.get(activeTabId)?.xterm.focus();
+            break;
+          case "term-out": tabs.get(msg.tabId)?.xterm.write(msg.data); break;
+          case "tree": fileTreeEl.replaceChildren(renderTree(msg.nodes)); break;
+          case "file-changed":
+            if (
+              layout.classList.contains("preview-open") &&
+              currentPreview?.kind === "file" &&
+              !currentPreview.editing &&
+              currentPreview.path === msg.path
+            ) {
+              try {
+                openPreviewFile(msg.path, await callWorker("read-file", { path: msg.path }), false);
+              } catch {}
+            }
+            break;
+          case "rpc-reply": {
+            const p = pendingRpcs.get(msg.id);
+            if (p) {
+              pendingRpcs.delete(msg.id);
+              msg.ok ? p.resolve(msg.value) : p.reject(new Error(msg.error));
+            }
+            break;
+          }
+          case "host-rpc": {
+            try {
+              let value = null;
+              if (msg.method === "duckdb-query") {
+                value = await executeDuckDbHost(msg.args);
+              } else if (msg.method === "preview-file") {
+                openPreviewFile(msg.args.path, msg.args.bytes, false);
+              } else if (msg.method === "preview-virtual") {
+                currentPreview = {
+                  kind: "virtual", vkind: msg.args.kind, title: msg.args.title,
+                  data: msg.args.data, rows: msg.args.rows, headers: msg.args.headers,
+                };
+                renderPreview();
+              } else if (msg.method === "download") {
+                triggerDownload(msg.args.name, msg.args.bytes);
+              } else if (msg.method === "pbcopy") {
+                await navigator.clipboard.writeText(msg.args.text);
+              } else if (msg.method === "pbpaste") {
+                value = await navigator.clipboard.readText();
+              }
+              worker.postMessage({ type: "host-rpc-result", id: msg.id, ok: true, value });
+            } catch (err) {
+              worker.postMessage({
+                type: "host-rpc-result", id: msg.id, ok: false, error: err?.message || String(err),
+              });
+            }
+            break;
+          }
+        }
+      };
+
+      worker.onerror = (err) => {
+        setStatus("Worker error", "error");
+        tabs.get(activeTabId)?.xterm.writeln(`\r\n\x1b[31m[Worker crash]\x1b[0m ${err.message}`);
+      };
+
+      worker.postMessage({
+        type: "boot",
+        tabId: firstId,
+        rows: firstTab.xterm.rows,
+        cols: firstTab.xterm.cols,
+        shareZipBytes: useShareBytes ? initialShareBytes : null,
+        corsProxy,
+        controlSab,
+      });
+    }
+
+    // ---------- Event Wiring ----------
+    new ResizeObserver(fitActiveTerminal).observe(termStage);
+    btnNewTab.addEventListener("click", () => createUiTab(true));
+
+    btnProxy.addEventListener("click", () => {
+      const next = prompt(
+        "Optional CORS proxy prefix for curl / scrape / crawl / scraper\n" +
+        "(Examples: http://localhost:8080/  or  https://your-worker.example/?url=  — leave empty to disable):",
+        corsProxy,
+      );
+      if (next === null) return;
+      corsProxy = next.trim();
+      localStorage.setItem("workbench_cors_proxy", corsProxy);
+      updateProxyUi();
+      worker?.postMessage({ type: "set-proxy", proxy: corsProxy });
+    });
+
+    function openSearch() {
+      searchBar.hidden = false;
+      searchInput.focus();
+      searchInput.select();
+    }
+    function closeSearch() {
+      searchBar.hidden = true;
+      tabs.get(activeTabId)?.search.clearDecorations?.();
+      tabs.get(activeTabId)?.xterm.focus();
+    }
+    $("btn-search").addEventListener("click", () => (searchBar.hidden ? openSearch() : closeSearch()));
+    $("search-next").addEventListener("click", () => tabs.get(activeTabId)?.search.findNext(searchInput.value));
+    $("search-prev").addEventListener("click", () => tabs.get(activeTabId)?.search.findPrevious(searchInput.value));
+    $("search-close").addEventListener("click", closeSearch);
+    searchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.shiftKey
+          ? tabs.get(activeTabId)?.search.findPrevious(searchInput.value)
+          : tabs.get(activeTabId)?.search.findNext(searchInput.value);
+      } else if (e.key === "Escape") {
+        closeSearch();
+      }
+    });
+    window.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        openSearch();
+      }
+    });
+
+    $("btn-save-log").addEventListener("click", () => {
+      const cur = tabs.get(activeTabId);
+      if (!cur) return;
+      triggerDownload(`terminal-sh${cur.id}.ansi.txt`, encoder.encode(cur.serialize.serialize()));
+    });
+
+    recipeSelect.addEventListener("change", () => {
+      const cmd = recipeSelect.value;
+      recipeSelect.value = "";
+      if (!cmd || !activeTabId) return;
+      worker?.postMessage({ type: "input", tabId: activeTabId, data: `${cmd}\r` });
+      tabs.get(activeTabId)?.xterm.focus();
+    });
+
+    async function ingestFiles(fileList) {
+      const files = [];
+      for (const file of fileList) {
+        const isArchive = /\.(tar\.gz|tgz|zip)$/i.test(file.name);
+        const extract = isArchive ? confirm(`Extract "${file.name}" directly into /work?\n(Cancel to copy raw file.)`) : false;
+        files.push({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()), extract });
+      }
+      worker?.postMessage({ type: "upload", files });
+    }
+
+    $("btn-upload").addEventListener("click", () => uploadInput.click());
+    uploadInput.addEventListener("change", () => {
+      if (uploadInput.files?.length) ingestFiles(uploadInput.files);
+      uploadInput.value = "";
+    });
+
+    window.addEventListener("dragover", (e) => { e.preventDefault(); document.body.classList.add("dragging"); });
+    window.addEventListener("dragleave", (e) => { if (e.relatedTarget === null) document.body.classList.remove("dragging"); });
+    window.addEventListener("drop", (e) => {
+      e.preventDefault();
+      document.body.classList.remove("dragging");
+      if (e.dataTransfer?.files?.length) ingestFiles(e.dataTransfer.files);
+    });
+
+    $("btn-export-zip").addEventListener("click", async () => {
+      triggerDownload("workspace.zip", await callWorker("export-zip"));
+    });
+
+    $("btn-share").addEventListener("click", async () => {
+      const bytes = await callWorker("export-zip");
+      if (bytes.length > 90_000 && !confirm(`Zip is ${formatSize(bytes.length)} — URL may be long. Continue?`)) return;
+      location.hash = `zip=${toBase64Url(bytes)}`;
+      try {
+        await navigator.clipboard.writeText(location.href);
+        setStatus(`Share URL copied (${formatSize(bytes.length)})`, "ready");
+      } catch {
+        setStatus(`URL hash updated (${formatSize(bytes.length)})`, "ready");
+      }
+    });
+
+    $("btn-mount").addEventListener("click", async () => {
+      try {
+        const handle = await window.showDirectoryPicker({ mode: "readwrite" });
+        await callWorker("mount-native", { handle });
+        $("btn-sync").hidden = false;
+        setStatus("Mounted /work/local", "ready");
+      } catch (e) {
+        if (e.name !== "AbortError") setStatus(`Mount failed: ${e.message}`, "error");
+      }
+    });
+
+    $("btn-sync").addEventListener("click", async () => {
+      await callWorker("sync-native");
+      setStatus("Synced /work/local", "ready");
+    });
+
+    $("btn-stop").addEventListener("click", () => {
+      const hitPy = interruptPythonIfRunning();
+      if (hitPy) tabs.get(activeTabId)?.xterm.write("^C\r\n");
+      worker?.postMessage({ type: "cancel", tabId: activeTabId });
+    });
+
+    $("btn-kill").addEventListener("click", () => spawnWorker(false));
+    $("btn-reset").addEventListener("click", () => {
+      if (confirm("Restore starter files in /work?")) worker?.postMessage({ type: "reset-workspace" });
+    });
+
+    $("btn-preview").addEventListener("click", () => {
+      layout.classList.toggle("preview-open");
+      setTimeout(fitActiveTerminal, 40);
+    });
+    $("btn-close-preview").addEventListener("click", () => {
+      destroyCm();
+      layout.classList.remove("preview-open");
+      setTimeout(fitActiveTerminal, 40);
+    });
+
+    btnEditToggle.addEventListener("click", () => {
+      if (currentPreview?.kind !== "file") return;
+      currentPreview.editing = !currentPreview.editing;
+      renderPreview();
+    });
+    btnSaveFile.addEventListener("click", saveCurrentEdit);
+
+    $("btn-new-file").addEventListener("click", async () => {
+      const name = prompt("New filename in /work (.py, .js, .sql, .json, .md):", "scrape_job.py");
+      if (!name) return;
+      const path = `/work/${name.replace(/^\/+/, "")}`;
+      await callWorker("write-file", { path, bytes: new Uint8Array(0) });
+      openPreviewFile(path, new Uint8Array(0), true);
+    });
+
+    $("btn-refresh").addEventListener("click", () => worker?.postMessage({ type: "list-tree" }));
+
+    spawnWorker(Boolean(initialShareBytes));
+  </script>
+</body>
+</html>
